@@ -118,6 +118,12 @@ interface PiActiveTurn {
   interrupted: boolean;
   assistantText: string;
   stderrLines: string[];
+  /** Stop reason from the most recent Pi internal `turn_end`. */
+  lastTurnEndStopReason: string | undefined;
+  /** Error message from the most recent Pi internal `turn_end`. */
+  lastTurnEndErrorMessage: string | undefined;
+  /** Assistant message payload from the most recent Pi internal `turn_end`. */
+  lastTurnEndMessage: Record<string, unknown> | undefined;
 }
 
 interface PiSessionState {
@@ -738,20 +744,59 @@ const makePiAdapter = (options?: PiAdapterLiveOptions) =>
         }
 
         case "turn_end": {
+          // Pi has multiple internal turns per user request (tool loops).
+          // Do NOT finalize here. Save metadata and extract any remaining
+          // assistant text delta. Finalization happens on agent_end.
           const assistantMessage = isRecord(message.message) ? message.message : undefined;
-          const stopReason = assistantMessage ? asString(assistantMessage.stopReason) : undefined;
-          const errorMessage = assistantMessage ? asString(assistantMessage.errorMessage) : undefined;
-          finishTurn(state, activeTurn, {
-            ...(stopReason !== undefined ? { stopReason } : {}),
-            ...(errorMessage !== undefined ? { errorMessage } : {}),
-            ...(assistantMessage ? { message: assistantMessage } : {}),
-          });
+          activeTurn.lastTurnEndStopReason = assistantMessage
+            ? asString(assistantMessage.stopReason)
+            : undefined;
+          activeTurn.lastTurnEndErrorMessage = assistantMessage
+            ? asString(assistantMessage.errorMessage)
+            : undefined;
+          activeTurn.lastTurnEndMessage = assistantMessage ?? undefined;
+
+          if (assistantMessage) {
+            const nextText = extractMessageText(assistantMessage);
+            if (nextText.length > activeTurn.assistantText.length) {
+              const delta = nextText.startsWith(activeTurn.assistantText)
+                ? nextText.slice(activeTurn.assistantText.length)
+                : nextText;
+              if (delta.length > 0) {
+                emitRuntimeEvent({
+                  type: "content.delta",
+                  ...runtimeEventBase({
+                    threadId: state.threadId,
+                    turnId: activeTurn.turnId,
+                    itemId: activeTurn.assistantItemId,
+                  }),
+                  payload: {
+                    streamKind: "assistant_text",
+                    delta,
+                  },
+                });
+                activeTurn.assistantText = nextText;
+              }
+            }
+          }
           return;
         }
 
         case "agent_end": {
+          // Pi's agent loop is complete. NOW finalize the T3 turn using
+          // the metadata saved from the most recent internal turn_end.
           if (!activeTurn.turnCompletedEmitted) {
-            finishTurn(state, activeTurn, {});
+            finishTurn(state, activeTurn, {
+              ...(activeTurn.lastTurnEndStopReason !== undefined
+                ? { stopReason: activeTurn.lastTurnEndStopReason }
+                : {}),
+              ...(activeTurn.lastTurnEndErrorMessage !== undefined
+                ? { errorMessage: activeTurn.lastTurnEndErrorMessage }
+                : {}),
+              ...(activeTurn.lastTurnEndMessage !== undefined
+                ? { message: activeTurn.lastTurnEndMessage }
+                : {}),
+            });
           }
           return;
         }
@@ -917,6 +962,9 @@ const makePiAdapter = (options?: PiAdapterLiveOptions) =>
             interrupted: false,
             assistantText: "",
             stderrLines: [],
+            lastTurnEndStopReason: undefined,
+            lastTurnEndErrorMessage: undefined,
+            lastTurnEndMessage: undefined,
           };
 
           const runningState = setSessionState(state, {
