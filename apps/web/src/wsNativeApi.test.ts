@@ -72,6 +72,13 @@ const defaultProviders: ReadonlyArray<ServerProviderStatus> = [
     authStatus: "authenticated",
     checkedAt: "2026-01-01T00:00:00.000Z",
   },
+  {
+    provider: "pi",
+    status: "warning",
+    available: true,
+    authStatus: "unknown",
+    checkedAt: "2026-01-01T00:00:00.000Z",
+  },
 ];
 
 beforeEach(() => {

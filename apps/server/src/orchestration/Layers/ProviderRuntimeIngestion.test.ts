@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import type { OrchestrationReadModel, ProviderRuntimeEvent } from "@t3tools/contracts";
+import type { OrchestrationReadModel, ProviderKind, ProviderRuntimeEvent } from "@t3tools/contracts";
 import {
   ApprovalRequestId,
   CommandId,
@@ -45,7 +45,7 @@ const asTurnId = (value: string): TurnId => TurnId.makeUnsafe(value);
 type LegacyProviderRuntimeEvent = {
   readonly type: string;
   readonly eventId: EventId;
-  readonly provider: "codex";
+  readonly provider: ProviderKind;
   readonly createdAt: string;
   readonly threadId: ThreadId;
   readonly turnId?: string | undefined;
@@ -563,6 +563,66 @@ describe("ProviderRuntimeIngestion", () => {
     expect(message?.streaming).toBe(false);
   });
 
+  it("preserves thinking deltas on assistant messages through completion", async () => {
+    const harness = await createHarness();
+    const now = new Date().toISOString();
+
+    harness.emit({
+      type: "content.delta",
+      eventId: asEventId("evt-thinking-delta"),
+      provider: "pi",
+      createdAt: now,
+      threadId: asThreadId("thread-1"),
+      turnId: asTurnId("turn-thinking"),
+      itemId: asItemId("item-thinking"),
+      payload: {
+        streamKind: "thinking",
+        delta: "Model reasoning goes here.",
+      },
+    });
+    harness.emit({
+      type: "content.delta",
+      eventId: asEventId("evt-assistant-text-delta"),
+      provider: "pi",
+      createdAt: now,
+      threadId: asThreadId("thread-1"),
+      turnId: asTurnId("turn-thinking"),
+      itemId: asItemId("item-thinking"),
+      payload: {
+        streamKind: "assistant_text",
+        delta: "Final answer",
+      },
+    });
+    harness.emit({
+      type: "item.completed",
+      eventId: asEventId("evt-assistant-thinking-completed"),
+      provider: "pi",
+      createdAt: now,
+      threadId: asThreadId("thread-1"),
+      turnId: asTurnId("turn-thinking"),
+      itemId: asItemId("item-thinking"),
+      payload: {
+        itemType: "assistant_message",
+        status: "completed",
+      },
+    });
+
+    const thread = await waitForThread(harness.engine, (entry) =>
+      entry.messages.some(
+        (message: ProviderRuntimeTestMessage) =>
+          message.id === "assistant:item-thinking" &&
+          message.thinkingText === "Model reasoning goes here." &&
+          !message.streaming,
+      ),
+    );
+    const message = thread.messages.find(
+      (entry: ProviderRuntimeTestMessage) => entry.id === "assistant:item-thinking",
+    );
+    expect(message?.thinkingText).toBe("Model reasoning goes here.");
+    expect(message?.text).toBe("Final answer");
+    expect(message?.streaming).toBe(false);
+  });
+
   it("uses assistant item completion detail when no assistant deltas were streamed", async () => {
     const harness = await createHarness();
     const now = new Date().toISOString();
@@ -955,6 +1015,11 @@ describe("ProviderRuntimeIngestion", () => {
       payload: {
         itemType: "assistant_message",
         status: "completed",
+        detail: "done",
+        data: {
+          role: "assistant",
+          content: [{ type: "text", text: "done" }],
+        },
       },
     });
     harness.emit({
@@ -969,7 +1034,7 @@ describe("ProviderRuntimeIngestion", () => {
       },
     });
 
-    await waitForThread(
+    const thread = await waitForThread(
       harness.engine,
       (thread) =>
         thread.session?.status === "ready" &&
@@ -979,6 +1044,11 @@ describe("ProviderRuntimeIngestion", () => {
             message.id === "assistant:item-complete-dedup" && !message.streaming,
         ),
     );
+
+    const message = thread.messages.find(
+      (entry: ProviderRuntimeTestMessage) => entry.id === "assistant:item-complete-dedup",
+    );
+    expect(message?.text).toBe("done");
 
     const events = await Effect.runPromise(
       Stream.runCollect(harness.engine.readEvents(0)).pipe(
@@ -1084,7 +1154,11 @@ describe("ProviderRuntimeIngestion", () => {
       (entry) =>
         entry.session?.status === "error" &&
         entry.session?.activeTurnId === "turn-3" &&
-        entry.session?.lastError === "runtime exploded",
+        entry.session?.lastError === "runtime exploded" &&
+        entry.activities.some(
+          (activity: ProviderRuntimeTestActivity) =>
+            activity.kind === "runtime.error" && activity.summary === "runtime exploded",
+        ),
     );
     expect(thread.session?.status).toBe("error");
     expect(thread.session?.lastError).toBe("runtime exploded");
@@ -1266,6 +1340,7 @@ describe("ProviderRuntimeIngestion", () => {
         ? (warning.payload as Record<string, unknown>)
         : undefined;
     expect(warning?.kind).toBe("runtime.warning");
+    expect(warning?.summary).toBe("Provider got slow");
     expect(warningPayload?.message).toBe("Provider got slow");
 
     const checkpoint = thread.checkpoints.find(

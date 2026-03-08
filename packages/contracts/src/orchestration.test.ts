@@ -186,6 +186,32 @@ it.effect("accepts provider-scoped model options in thread.turn.start", () =>
   }),
 );
 
+it.effect("accepts pi thinking-level model options in thread.turn.start", () =>
+  Effect.gen(function* () {
+    const parsed = yield* decodeThreadTurnStartCommand({
+      type: "thread.turn.start",
+      commandId: "cmd-turn-options-pi",
+      threadId: "thread-pi",
+      message: {
+        messageId: "msg-options-pi",
+        role: "user",
+        text: "hello",
+        attachments: [],
+      },
+      provider: "pi",
+      model: "anthropic/claude-sonnet-4-6",
+      modelOptions: {
+        pi: {
+          thinkingLevel: "medium",
+        },
+      },
+      createdAt: "2026-01-01T00:00:00.000Z",
+    });
+    assert.strictEqual(parsed.provider, "pi");
+    assert.strictEqual(parsed.modelOptions?.pi?.thinkingLevel, "medium");
+  }),
+);
+
 it.effect(
   "decodes thread.turn-start-requested defaults for provider, runtime mode, and interaction mode",
   () =>

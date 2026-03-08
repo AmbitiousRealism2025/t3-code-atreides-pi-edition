@@ -22,6 +22,12 @@ describe("normalizeCustomModelSlugs", () => {
       ]),
     ).toEqual(["custom/internal-model"]);
   });
+
+  it("normalizes pi aliases against the built-in pi catalog", () => {
+    expect(normalizeCustomModelSlugs(["sonnet", "custom/pi-model"], "pi")).toEqual([
+      "custom/pi-model",
+    ]);
+  });
 });
 
 describe("getAppModelOptions", () => {
@@ -35,6 +41,16 @@ describe("getAppModelOptions", () => {
       "gpt-5.2-codex",
       "gpt-5.2",
       "custom/internal-model",
+    ]);
+  });
+
+  it("builds provider-scoped options for pi", () => {
+    const options = getAppModelOptions("pi", ["custom/pi-model"]);
+
+    expect(options.map((option) => option.slug)).toEqual([
+      "anthropic/claude-sonnet-4-6",
+      "openai-codex/gpt-5.4",
+      "custom/pi-model",
     ]);
   });
 
@@ -58,6 +74,11 @@ describe("resolveAppModelSelection", () => {
 
   it("falls back to the provider default when no model is selected", () => {
     expect(resolveAppModelSelection("codex", [], "")).toBe("gpt-5.4");
+  });
+
+  it("upgrades legacy pi gpt-5.4 selections to the provider-qualified slug", () => {
+    expect(resolveAppModelSelection("pi", [], "gpt-5.4")).toBe("openai-codex/gpt-5.4");
+    expect(resolveAppModelSelection("pi", [], "5.4")).toBe("openai-codex/gpt-5.4");
   });
 });
 

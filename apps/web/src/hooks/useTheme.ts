@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useSyncExternalStore } from "react";
 
-type Theme = "light" | "dark" | "system";
+export type Theme = "light" | "dark" | "system";
+export type ResolvedTheme = "light" | "dark";
 type ThemeSnapshot = {
   theme: Theme;
   systemDark: boolean;
@@ -15,21 +16,41 @@ function emitChange() {
   for (const listener of listeners) listener();
 }
 
+function canUseThemeDom(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    typeof document !== "undefined" &&
+    typeof window.matchMedia === "function"
+  );
+}
+
 function getSystemDark(): boolean {
+  if (!canUseThemeDom()) {
+    return false;
+  }
+
   return window.matchMedia(MEDIA_QUERY).matches;
 }
 
 function getStored(): Theme {
-  const raw = localStorage.getItem(STORAGE_KEY);
+  if (typeof window === "undefined") {
+    return "system";
+  }
+
+  const raw = window.localStorage.getItem(STORAGE_KEY);
   if (raw === "light" || raw === "dark" || raw === "system") return raw;
   return "system";
 }
 
 function applyTheme(theme: Theme, suppressTransitions = false) {
+  if (!canUseThemeDom()) {
+    return;
+  }
+
   if (suppressTransitions) {
     document.documentElement.classList.add("no-transitions");
   }
-  const isDark = theme === "dark" || (theme === "system" && getSystemDark());
+  const isDark = resolveTheme(theme, getSystemDark()) === "dark";
   document.documentElement.classList.toggle("dark", isDark);
   if (suppressTransitions) {
     // Force a reflow so the no-transitions class takes effect before removal
@@ -41,8 +62,18 @@ function applyTheme(theme: Theme, suppressTransitions = false) {
   }
 }
 
+export function resolveTheme(theme: Theme, systemDark: boolean): ResolvedTheme {
+  if (theme === "system") {
+    return systemDark ? "dark" : "light";
+  }
+
+  return theme;
+}
+
 // Apply immediately on module load to prevent flash
-applyTheme(getStored());
+if (canUseThemeDom()) {
+  applyTheme(getStored());
+}
 
 function getSnapshot(): ThemeSnapshot {
   const theme = getStored();
@@ -58,6 +89,12 @@ function getSnapshot(): ThemeSnapshot {
 
 function subscribe(listener: () => void): () => void {
   listeners.push(listener);
+
+  if (!canUseThemeDom()) {
+    return () => {
+      listeners = listeners.filter((l) => l !== listener);
+    };
+  }
 
   // Listen for system preference changes
   const mq = window.matchMedia(MEDIA_QUERY);
@@ -84,14 +121,17 @@ function subscribe(listener: () => void): () => void {
 }
 
 export function useTheme() {
-  const snapshot = useSyncExternalStore(subscribe, getSnapshot);
+  const snapshot = useSyncExternalStore(subscribe, getSnapshot, () => ({
+    theme: "system" as const,
+    systemDark: false,
+  }));
   const theme = snapshot.theme;
-
-  const resolvedTheme: "light" | "dark" =
-    theme === "system" ? (snapshot.systemDark ? "dark" : "light") : theme;
+  const resolvedTheme = resolveTheme(theme, snapshot.systemDark);
 
   const setTheme = useCallback((next: Theme) => {
-    localStorage.setItem(STORAGE_KEY, next);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(STORAGE_KEY, next);
+    }
     applyTheme(next, true);
     emitChange();
   }, []);

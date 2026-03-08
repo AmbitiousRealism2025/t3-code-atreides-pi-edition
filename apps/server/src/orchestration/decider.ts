@@ -474,6 +474,7 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
           messageId: command.messageId,
           role: "assistant",
           text: command.delta,
+          ...(command.thinkingDelta ? { thinkingText: command.thinkingDelta } : {}),
           turnId: command.turnId ?? null,
           streaming: true,
           createdAt: command.createdAt,

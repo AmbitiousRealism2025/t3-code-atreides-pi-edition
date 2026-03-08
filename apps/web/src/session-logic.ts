@@ -3,6 +3,7 @@ import {
   type OrchestrationLatestTurn,
   type OrchestrationThreadActivity,
   type OrchestrationProposedPlanId,
+  type PiThinkingLevel,
   type ProviderKind,
   type UserInputQuestion,
   type TurnId,
@@ -18,6 +19,7 @@ export const PROVIDER_OPTIONS: Array<{
   available: boolean;
 }> = [
   { value: "codex", label: "Codex", available: true },
+  { value: "pi", label: "Pi", available: true },
   { value: "claudeCode", label: "Claude Code", available: false },
   { value: "cursor", label: "Cursor", available: false },
 ];
@@ -436,6 +438,29 @@ export function deriveWorkLogEntries(
       }
       return entry;
     });
+}
+
+export function deriveInProgressReasoningEntry(input: {
+  provider: ProviderKind;
+  thinkingLevel: PiThinkingLevel | null | undefined;
+  workStartedAt: string | null;
+  isWorking: boolean;
+  existingEntries: ReadonlyArray<WorkLogEntry>;
+}): WorkLogEntry | null {
+  if (!input.isWorking || input.provider !== "pi" || !input.thinkingLevel || !input.workStartedAt) {
+    return null;
+  }
+  if (input.existingEntries.some((entry) => entry.id.startsWith("synthetic:reasoning:"))) {
+    return null;
+  }
+  return {
+    id: `synthetic:reasoning:${input.workStartedAt}`,
+    createdAt: input.workStartedAt,
+    label: "Model reasoning in progress",
+    detail:
+      "Pi reveals the full reasoning block only after the reply finishes. Tool calls will appear here live if the model uses them.",
+    tone: "thinking",
+  };
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {

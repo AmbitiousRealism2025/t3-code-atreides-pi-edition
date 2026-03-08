@@ -15,6 +15,7 @@ import {
   DEFAULT_PROVIDER_INTERACTION_MODE,
   type ClientOrchestrationCommand,
   type OrchestrationCommand,
+  OrchestrationThreadActivity,
   ORCHESTRATION_WS_CHANNELS,
   ORCHESTRATION_WS_METHODS,
   PROVIDER_SEND_TURN_MAX_IMAGE_BYTES,
@@ -54,6 +55,7 @@ import { ProjectionSnapshotQuery } from "./orchestration/Services/ProjectionSnap
 import { OrchestrationReactor } from "./orchestration/Services/OrchestrationReactor";
 import { ProviderService } from "./provider/Services/ProviderService";
 import { ProviderHealth } from "./provider/Services/ProviderHealth";
+import { PiModelDiscovery } from "./provider/Services/PiModelDiscovery";
 import { CheckpointDiffQuery } from "./checkpointing/Services/CheckpointDiffQuery";
 import { clamp } from "effect/Number";
 import { Open, resolveAvailableEditors } from "./open";
@@ -208,7 +210,8 @@ export type ServerCoreRuntimeServices =
   | CheckpointDiffQuery
   | OrchestrationReactor
   | ProviderService
-  | ProviderHealth;
+  | ProviderHealth
+  | PiModelDiscovery;
 
 export type ServerRuntimeServices =
   | ServerCoreRuntimeServices
@@ -230,6 +233,26 @@ export class ServerLifecycleError extends Schema.TaggedErrorClass<ServerLifecycl
 class RouteRequestError extends Schema.TaggedErrorClass<RouteRequestError>()("RouteRequestError", {
   message: Schema.String,
 }) {}
+
+const PiActivityBridgeRequest = Schema.Struct({
+  threadId: ThreadId,
+  activity: OrchestrationThreadActivity,
+});
+
+type PiActivityBridgeRequest = typeof PiActivityBridgeRequest.Type;
+
+function readRequestBody(req: http.IncomingMessage): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    req.on("data", (chunk) => {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    });
+    req.on("end", () => {
+      resolve(Buffer.concat(chunks).toString("utf8"));
+    });
+    req.on("error", reject);
+  });
+}
 
 export const createServer = Effect.fn(function* (): Effect.fn.Return<
   http.Server,
@@ -254,6 +277,7 @@ export const createServer = Effect.fn(function* (): Effect.fn.Return<
   const terminalManager = yield* TerminalManager;
   const keybindingsManager = yield* Keybindings;
   const providerHealth = yield* ProviderHealth;
+  const piModelDiscovery = yield* PiModelDiscovery;
   const git = yield* GitCore;
   const fileSystem = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
@@ -496,6 +520,74 @@ export const createServer = Effect.fn(function* (): Effect.fn.Return<
             res.end();
           }
           return;
+        }
+
+        // Pi model discovery endpoint
+        if (url.pathname === "/api/provider/pi/models") {
+          const corsHeaders = {
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type",
+          };
+          if (req.method === "OPTIONS") {
+            respond(204, corsHeaders);
+            return;
+          }
+          if (req.method === "GET") {
+            const modelList = yield* piModelDiscovery.getModels;
+            respond(
+              200,
+              { "Content-Type": "application/json", ...corsHeaders },
+              JSON.stringify(modelList),
+            );
+            return;
+          }
+        }
+
+        // Pi activity bridge endpoint
+        if (url.pathname === "/api/provider/pi/activity") {
+          const corsHeaders = {
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "POST, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type",
+          };
+          if (req.method === "OPTIONS") {
+            respond(204, corsHeaders);
+            return;
+          }
+          if (req.method === "POST") {
+            const rawBody = yield* Effect.tryPromise({
+              try: () => readRequestBody(req),
+              catch: () =>
+                new RouteRequestError({
+                  message: "Failed to read Pi activity bridge request body.",
+                }),
+            });
+            const rawJson = yield* Effect.try({
+              try: () => JSON.parse(rawBody),
+              catch: () =>
+                new RouteRequestError({
+                  message: "Pi activity bridge request body must be valid JSON.",
+                }),
+            });
+            const payload = yield* Schema.decodeUnknownEffect(PiActivityBridgeRequest)(rawJson).pipe(
+              Effect.mapError(
+                (error) =>
+                  new RouteRequestError({
+                    message: `Invalid Pi activity bridge payload: ${String(error)}`,
+                  }),
+              ),
+            );
+            yield* orchestrationEngine.dispatch({
+              type: "thread.activity.append",
+              commandId: CommandId.makeUnsafe(`pi-bridge:${payload.activity.id}`),
+              threadId: payload.threadId,
+              activity: payload.activity,
+              createdAt: payload.activity.createdAt,
+            });
+            respond(202, { "Content-Type": "application/json", ...corsHeaders }, JSON.stringify({ ok: true }));
+            return;
+          }
         }
 
         // In dev mode, redirect to Vite dev server

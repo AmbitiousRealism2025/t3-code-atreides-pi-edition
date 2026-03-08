@@ -42,6 +42,24 @@ describe("ProviderSessionStartInput", () => {
       }),
     ).toThrow();
   });
+
+  it("accepts pi provider payloads", () => {
+    const parsed = decodeProviderSessionStartInput({
+      threadId: "thread-pi",
+      provider: "pi",
+      model: "openai-codex/gpt-5.4",
+      modelOptions: {
+        pi: {
+          thinkingLevel: "high",
+        },
+      },
+      runtimeMode: "full-access",
+    });
+
+    expect(parsed.provider).toBe("pi");
+    expect(parsed.model).toBe("openai-codex/gpt-5.4");
+    expect(parsed.modelOptions?.pi?.thinkingLevel).toBe("high");
+  });
 });
 
 describe("ProviderSendTurnInput", () => {
@@ -60,5 +78,20 @@ describe("ProviderSendTurnInput", () => {
     expect(parsed.model).toBe("gpt-5.3-codex");
     expect(parsed.modelOptions?.codex?.reasoningEffort).toBe("xhigh");
     expect(parsed.modelOptions?.codex?.fastMode).toBe(true);
+  });
+
+  it("accepts pi thinking-level model options", () => {
+    const parsed = decodeProviderSendTurnInput({
+      threadId: "thread-pi",
+      model: "anthropic/claude-sonnet-4-6",
+      modelOptions: {
+        pi: {
+          thinkingLevel: "off",
+        },
+      },
+    });
+
+    expect(parsed.model).toBe("anthropic/claude-sonnet-4-6");
+    expect(parsed.modelOptions?.pi?.thinkingLevel).toBe("off");
   });
 });

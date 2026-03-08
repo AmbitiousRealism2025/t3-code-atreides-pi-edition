@@ -50,6 +50,7 @@ const ProjectionThreadMessageDbRowSchema = ProjectionThreadMessage.mapFields(
   Struct.assign({
     isStreaming: Schema.Number,
     attachments: Schema.NullOr(Schema.fromJsonString(Schema.Array(ChatAttachment))),
+    thinkingText: Schema.NullOr(Schema.String),
   }),
 );
 const ProjectionThreadProposedPlanDbRowSchema = ProjectionThreadProposedPlan;
@@ -181,6 +182,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
           turn_id AS "turnId",
           role,
           text,
+          thinking_text AS "thinkingText",
           attachments_json AS "attachments",
           is_streaming AS "isStreaming",
           created_at AS "createdAt",
@@ -419,6 +421,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
               id: row.messageId,
               role: row.role,
               text: row.text,
+              ...(row.thinkingText !== null ? { thinkingText: row.thinkingText } : {}),
               ...(row.attachments !== null ? { attachments: row.attachments } : {}),
               turnId: row.turnId,
               streaming: row.isStreaming === 1,

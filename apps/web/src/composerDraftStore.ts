@@ -1,9 +1,11 @@
 import {
   DEFAULT_REASONING_EFFORT_BY_PROVIDER,
   ProjectId,
+  PI_THINKING_LEVEL_OPTIONS,
   REASONING_EFFORT_OPTIONS_BY_PROVIDER,
   ThreadId,
   type CodexReasoningEffort,
+  type PiThinkingLevel,
   type ProviderKind,
   type ProviderInteractionMode,
   type RuntimeMode,
@@ -41,6 +43,7 @@ interface PersistedComposerThreadDraftState {
   runtimeMode?: RuntimeMode | null;
   interactionMode?: ProviderInteractionMode | null;
   effort?: CodexReasoningEffort | null;
+  piThinkingLevel?: PiThinkingLevel | null;
   codexFastMode?: boolean | null;
   serviceTier?: string | null;
 }
@@ -71,6 +74,7 @@ interface ComposerThreadDraftState {
   runtimeMode: RuntimeMode | null;
   interactionMode: ProviderInteractionMode | null;
   effort: CodexReasoningEffort | null;
+  piThinkingLevel: PiThinkingLevel | null;
   codexFastMode: boolean;
 }
 
@@ -130,6 +134,10 @@ interface ComposerDraftStoreState {
     interactionMode: ProviderInteractionMode | null | undefined,
   ) => void;
   setEffort: (threadId: ThreadId, effort: CodexReasoningEffort | null | undefined) => void;
+  setPiThinkingLevel: (
+    threadId: ThreadId,
+    thinkingLevel: PiThinkingLevel | null | undefined,
+  ) => void;
   setCodexFastMode: (threadId: ThreadId, enabled: boolean | null | undefined) => void;
   addImage: (threadId: ThreadId, image: ComposerImageAttachment) => void;
   addImages: (threadId: ThreadId, images: ComposerImageAttachment[]) => void;
@@ -165,12 +173,14 @@ const EMPTY_THREAD_DRAFT = Object.freeze({
   runtimeMode: null,
   interactionMode: null,
   effort: null,
+  piThinkingLevel: null,
   codexFastMode: false,
 }) as ComposerThreadDraftState;
 
 const REASONING_EFFORT_VALUES = new Set<CodexReasoningEffort>(
   REASONING_EFFORT_OPTIONS_BY_PROVIDER.codex,
 );
+const PI_THINKING_LEVEL_VALUES = new Set<PiThinkingLevel>(PI_THINKING_LEVEL_OPTIONS);
 
 function createEmptyThreadDraft(): ComposerThreadDraftState {
   return {
@@ -183,6 +193,7 @@ function createEmptyThreadDraft(): ComposerThreadDraftState {
     runtimeMode: null,
     interactionMode: null,
     effort: null,
+    piThinkingLevel: null,
     codexFastMode: false,
   };
 }
@@ -203,12 +214,13 @@ function shouldRemoveDraft(draft: ComposerThreadDraftState): boolean {
     draft.runtimeMode === null &&
     draft.interactionMode === null &&
     draft.effort === null &&
+    draft.piThinkingLevel === null &&
     draft.codexFastMode === false
   );
 }
 
 function normalizeProviderKind(value: unknown): ProviderKind | null {
-  return value === "codex" ? value : null;
+  return value === "codex" || value === "pi" ? value : null;
 }
 
 function revokeObjectPreviewUrl(previewUrl: string): void {
@@ -386,6 +398,13 @@ function normalizePersistedComposerDraftState(value: unknown): PersistedComposer
       effortCandidate && REASONING_EFFORT_VALUES.has(effortCandidate as CodexReasoningEffort)
         ? (effortCandidate as CodexReasoningEffort)
         : null;
+    const piThinkingLevelCandidate =
+      typeof draftCandidate.piThinkingLevel === "string" ? draftCandidate.piThinkingLevel : null;
+    const piThinkingLevel =
+      piThinkingLevelCandidate &&
+      PI_THINKING_LEVEL_VALUES.has(piThinkingLevelCandidate as PiThinkingLevel)
+        ? (piThinkingLevelCandidate as PiThinkingLevel)
+        : null;
     const codexFastMode =
       draftCandidate.codexFastMode === true ||
       (typeof draftCandidate.serviceTier === "string" && draftCandidate.serviceTier === "fast");
@@ -397,6 +416,7 @@ function normalizePersistedComposerDraftState(value: unknown): PersistedComposer
       !runtimeMode &&
       !interactionMode &&
       !effort &&
+      !piThinkingLevel &&
       !codexFastMode
     ) {
       continue;
@@ -409,6 +429,7 @@ function normalizePersistedComposerDraftState(value: unknown): PersistedComposer
       ...(runtimeMode ? { runtimeMode } : {}),
       ...(interactionMode ? { interactionMode } : {}),
       ...(effort ? { effort } : {}),
+      ...(piThinkingLevel ? { piThinkingLevel } : {}),
       ...(codexFastMode ? { codexFastMode } : {}),
     };
   }
@@ -516,6 +537,7 @@ function toHydratedThreadDraft(
     runtimeMode: persistedDraft.runtimeMode ?? null,
     interactionMode: persistedDraft.interactionMode ?? null,
     effort: persistedDraft.effort ?? null,
+    piThinkingLevel: persistedDraft.piThinkingLevel ?? null,
     codexFastMode: persistedDraft.codexFastMode === true,
   };
 }
@@ -920,6 +942,34 @@ export const useComposerDraftStore = create<ComposerDraftStoreState>()(
           return { draftsByThreadId: nextDraftsByThreadId };
         });
       },
+      setPiThinkingLevel: (threadId, thinkingLevel) => {
+        if (threadId.length === 0) {
+          return;
+        }
+        const nextPiThinkingLevel =
+          thinkingLevel && PI_THINKING_LEVEL_VALUES.has(thinkingLevel) ? thinkingLevel : null;
+        set((state) => {
+          const existing = state.draftsByThreadId[threadId];
+          if (!existing && nextPiThinkingLevel === null) {
+            return state;
+          }
+          const base = existing ?? createEmptyThreadDraft();
+          if (base.piThinkingLevel === nextPiThinkingLevel) {
+            return state;
+          }
+          const nextDraft: ComposerThreadDraftState = {
+            ...base,
+            piThinkingLevel: nextPiThinkingLevel,
+          };
+          const nextDraftsByThreadId = { ...state.draftsByThreadId };
+          if (shouldRemoveDraft(nextDraft)) {
+            delete nextDraftsByThreadId[threadId];
+          } else {
+            nextDraftsByThreadId[threadId] = nextDraft;
+          }
+          return { draftsByThreadId: nextDraftsByThreadId };
+        });
+      },
       setCodexFastMode: (threadId, enabled) => {
         if (threadId.length === 0) {
           return;
@@ -1184,6 +1234,7 @@ export const useComposerDraftStore = create<ComposerDraftStoreState>()(
             draft.runtimeMode === null &&
             draft.interactionMode === null &&
             draft.effort === null &&
+            draft.piThinkingLevel === null &&
             draft.codexFastMode === false
           ) {
             continue;
@@ -1206,6 +1257,9 @@ export const useComposerDraftStore = create<ComposerDraftStoreState>()(
           }
           if (draft.effort) {
             persistedDraft.effort = draft.effort;
+          }
+          if (draft.piThinkingLevel) {
+            persistedDraft.piThinkingLevel = draft.piThinkingLevel;
           }
           if (draft.codexFastMode) {
             persistedDraft.codexFastMode = true;

@@ -1,6 +1,7 @@
 import { Fragment, type ReactNode, createElement, useEffect } from "react";
 import {
   DEFAULT_MODEL_BY_PROVIDER,
+  ProviderKind as ProviderKindSchema,
   type ProviderKind,
   ThreadId,
   type OrchestrationReadModel,
@@ -12,6 +13,7 @@ import {
   resolveModelSlug,
   resolveModelSlugForProvider,
 } from "@t3tools/shared/model";
+import { Schema } from "effect";
 import { create } from "zustand";
 import { type ChatMessage, type Project, type Thread } from "./types";
 
@@ -40,6 +42,7 @@ const initialState: AppState = {
   threads: [],
   threadsHydrated: false,
 };
+const isProviderKind = Schema.is(ProviderKindSchema);
 const persistedExpandedProjectCwds = new Set<string>();
 
 // ── Persist helpers ──────────────────────────────────────────────────
@@ -143,24 +146,29 @@ function toLegacySessionStatus(
 }
 
 function toLegacyProvider(providerName: string | null): ProviderKind {
-  if (providerName === "codex") {
+  if (isProviderKind(providerName)) {
     return providerName;
   }
   return "codex";
 }
 
-const CODEX_MODEL_SLUGS = new Set<string>(getModelOptions("codex").map((option) => option.slug));
+const MODEL_SLUGS_BY_PROVIDER: Record<ProviderKind, ReadonlySet<string>> = {
+  codex: new Set(getModelOptions("codex").map((option) => option.slug)),
+  pi: new Set(getModelOptions("pi").map((option) => option.slug)),
+};
 
 function inferProviderForThreadModel(input: {
   readonly model: string;
   readonly sessionProviderName: string | null;
 }): ProviderKind {
-  if (input.sessionProviderName === "codex") {
+  if (isProviderKind(input.sessionProviderName)) {
     return input.sessionProviderName;
   }
-  const normalizedCodex = normalizeModelSlug(input.model, "codex");
-  if (normalizedCodex && CODEX_MODEL_SLUGS.has(normalizedCodex)) {
-    return "codex";
+  for (const provider of ["codex", "pi"] as const satisfies ReadonlyArray<ProviderKind>) {
+    const normalized = normalizeModelSlug(input.model, provider);
+    if (normalized && MODEL_SLUGS_BY_PROVIDER[provider].has(normalized)) {
+      return provider;
+    }
   }
   return "codex";
 }
@@ -247,6 +255,7 @@ export function syncServerReadModel(state: AppState, readModel: OrchestrationRea
             id: message.id,
             role: message.role,
             text: message.text,
+            ...(message.thinkingText ? { thinkingText: message.thinkingText } : {}),
             createdAt: message.createdAt,
             streaming: message.streaming,
             ...(message.streaming ? {} : { completedAt: message.updatedAt }),

@@ -2,8 +2,10 @@ import {
   ChevronRightIcon,
   FolderIcon,
   GitPullRequestIcon,
+  MoonIcon,
   RocketIcon,
   SquarePenIcon,
+  SunIcon,
   TerminalIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -21,6 +23,7 @@ import { useNavigate, useParams } from "@tanstack/react-router";
 import { useAppSettings } from "../appSettings";
 import { isElectron } from "../env";
 import { APP_STAGE_LABEL } from "../branding";
+import { useTheme } from "../hooks/useTheme";
 import { newCommandId, newProjectId, newThreadId } from "../lib/utils";
 import { useStore } from "../store";
 import { isChatNewLocalShortcut, isChatNewShortcut, shortcutLabelForCommand } from "../keybindings";
@@ -58,6 +61,7 @@ import {
   SidebarSeparator,
   SidebarTrigger,
 } from "./ui/sidebar";
+import { Switch } from "./ui/switch";
 import { formatWorktreePathForDisplay, getOrphanedWorktreePathForThread } from "../worktreeCleanup";
 import { isNonEmpty as isNonEmptyString } from "effect/String";
 
@@ -278,6 +282,7 @@ export default function Sidebar() {
     (store) => store.clearProjectDraftThreadById,
   );
   const navigate = useNavigate();
+  const { theme, setTheme, resolvedTheme } = useTheme();
   const { settings: appSettings } = useAppSettings();
   const routeThreadId = useParams({
     strict: false,
@@ -898,6 +903,13 @@ export default function Sidebar() {
       shortcutLabelForCommand(keybindings, "chat.new"),
     [keybindings],
   );
+  const isDarkModeEnabled = resolvedTheme === "dark";
+  const themeSummary =
+    theme === "system"
+      ? `Following system (${resolvedTheme})`
+      : resolvedTheme === "dark"
+        ? "Always dark"
+        : "Always light";
 
   const handleDesktopUpdateButtonClick = useCallback(() => {
     const bridge = window.desktopBridge;
@@ -1298,6 +1310,51 @@ export default function Sidebar() {
 
       <SidebarSeparator />
       <SidebarFooter className="gap-0 p-3">
+        <div className="mb-3 rounded-lg border border-border bg-background/70 p-2.5">
+          <div className="flex items-center gap-2">
+            <div
+              className={`flex size-7 shrink-0 items-center justify-center rounded-md ${
+                isDarkModeEnabled ? "bg-primary/12 text-primary" : "bg-muted text-muted-foreground"
+              }`}
+            >
+              {isDarkModeEnabled ? (
+                <MoonIcon className="size-3.5" />
+              ) : (
+                <SunIcon className="size-3.5" />
+              )}
+            </div>
+
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5">
+                <p className="text-xs font-medium text-foreground">Dark mode</p>
+                {theme === "system" ? (
+                  <span className="rounded-full bg-muted px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-[0.18em] text-muted-foreground/70">
+                    Auto
+                  </span>
+                ) : null}
+              </div>
+              <p className="text-[10px] text-muted-foreground/70">{themeSummary}</p>
+            </div>
+
+            <Switch
+              aria-label="Toggle dark mode"
+              checked={isDarkModeEnabled}
+              onCheckedChange={(checked) => {
+                setTheme(checked ? "dark" : "light");
+              }}
+            />
+          </div>
+          <button
+            type="button"
+            className="mt-2 text-[10px] text-muted-foreground/65 transition-colors hover:text-foreground"
+            onClick={() => {
+              void navigate({ to: "/settings" });
+            }}
+          >
+            Open appearance settings
+          </button>
+        </div>
+
         {addingProject ? (
           <>
             <p className="mb-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/70">

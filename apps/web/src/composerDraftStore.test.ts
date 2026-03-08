@@ -360,6 +360,35 @@ describe("composerDraftStore codex fast mode", () => {
   });
 });
 
+describe("composerDraftStore pi thinking level", () => {
+  const threadId = ThreadId.makeUnsafe("thread-pi-thinking");
+
+  beforeEach(() => {
+    useComposerDraftStore.setState({
+      draftsByThreadId: {},
+      draftThreadsByThreadId: {},
+      projectDraftThreadIdByProjectId: {},
+    });
+  });
+
+  it("stores pi thinking level in the draft", () => {
+    const store = useComposerDraftStore.getState();
+    store.setPiThinkingLevel(threadId, "medium");
+
+    expect(useComposerDraftStore.getState().draftsByThreadId[threadId]?.piThinkingLevel).toBe(
+      "medium",
+    );
+  });
+
+  it("clears pi thinking level when reset to null", () => {
+    const store = useComposerDraftStore.getState();
+    store.setPiThinkingLevel(threadId, "off");
+    store.setPiThinkingLevel(threadId, null);
+
+    expect(useComposerDraftStore.getState().draftsByThreadId[threadId]).toBeUndefined();
+  });
+});
+
 describe("composerDraftStore setModel", () => {
   const threadId = ThreadId.makeUnsafe("thread-model");
 

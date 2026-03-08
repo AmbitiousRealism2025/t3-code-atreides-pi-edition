@@ -20,6 +20,10 @@ const RuntimeEventRawSource = Schema.Literals([
   "codex.app-server.request",
   "codex.eventmsg",
   "codex.sdk.thread-event",
+  "pi.rpc.event",
+  "pi.rpc.response",
+  "pi.rpc.stderr",
+  "pi.rpc.stdout",
 ]);
 export type RuntimeEventRawSource = typeof RuntimeEventRawSource.Type;
 
@@ -77,6 +81,7 @@ export type RuntimeItemStatus = typeof RuntimeItemStatus.Type;
 
 const RuntimeContentStreamKind = Schema.Literals([
   "assistant_text",
+  "thinking",
   "reasoning_text",
   "reasoning_summary_text",
   "plan_text",

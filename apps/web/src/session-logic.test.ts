@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   deriveActiveWorkStartedAt,
   deriveActivePlanState,
+  deriveInProgressReasoningEntry,
   PROVIDER_OPTIONS,
   derivePendingApprovals,
   derivePendingUserInputs,
@@ -522,6 +523,45 @@ describe("deriveTimelineEntries", () => {
   });
 });
 
+describe("deriveInProgressReasoningEntry", () => {
+  it("creates a synthetic reasoning entry for active pi thinking turns", () => {
+    expect(
+      deriveInProgressReasoningEntry({
+        provider: "pi",
+        thinkingLevel: "medium",
+        workStartedAt: "2026-02-23T00:00:03.000Z",
+        isWorking: true,
+        existingEntries: [],
+      }),
+    ).toMatchObject({
+      createdAt: "2026-02-23T00:00:03.000Z",
+      label: "Model reasoning in progress",
+      tone: "thinking",
+    });
+  });
+
+  it("does not create a synthetic reasoning entry when pi thinking is inactive", () => {
+    expect(
+      deriveInProgressReasoningEntry({
+        provider: "pi",
+        thinkingLevel: null,
+        workStartedAt: "2026-02-23T00:00:03.000Z",
+        isWorking: true,
+        existingEntries: [],
+      }),
+    ).toBeNull();
+    expect(
+      deriveInProgressReasoningEntry({
+        provider: "codex",
+        thinkingLevel: "medium",
+        workStartedAt: "2026-02-23T00:00:03.000Z",
+        isWorking: true,
+        existingEntries: [],
+      }),
+    ).toBeNull();
+  });
+});
+
 describe("hasToolActivityForTurn", () => {
   it("returns false when turn id is missing", () => {
     const activities: OrchestrationThreadActivity[] = [
@@ -645,6 +685,7 @@ describe("PROVIDER_OPTIONS", () => {
     const cursor = PROVIDER_OPTIONS.find((option) => option.value === "cursor");
     expect(PROVIDER_OPTIONS).toEqual([
       { value: "codex", label: "Codex", available: true },
+      { value: "pi", label: "Pi", available: true },
       { value: "claudeCode", label: "Claude Code", available: false },
       { value: "cursor", label: "Cursor", available: false },
     ]);

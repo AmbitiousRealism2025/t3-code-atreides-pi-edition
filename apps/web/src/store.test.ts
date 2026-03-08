@@ -147,4 +147,51 @@ describe("store read model sync", () => {
 
     expect(next.threads[0]?.model).toBe(DEFAULT_MODEL_BY_PROVIDER.codex);
   });
+
+  it("retains pi as the active provider when the server session says pi", () => {
+    const initialState = makeState(makeThread());
+    const readModel = makeReadModel(
+      makeReadModelThread({
+        model: "openai/gpt-4o-mini",
+        session: {
+          threadId: ThreadId.makeUnsafe("thread-1"),
+          status: "ready",
+          providerName: "pi",
+          runtimeMode: "full-access",
+          activeTurnId: null,
+          lastError: null,
+          updatedAt: "2026-02-25T12:35:00.000Z",
+        },
+      }),
+    );
+
+    const next = syncServerReadModel(initialState, readModel);
+
+    expect(next.threads[0]?.session?.provider).toBe("pi");
+    expect(next.threads[0]?.model).toBe("openai/gpt-4o-mini");
+  });
+
+  it("preserves assistant thinking text from the server snapshot", () => {
+    const initialState = makeState(makeThread());
+    const readModel = makeReadModel(
+      makeReadModelThread({
+        messages: [
+          {
+            id: "assistant-1" as Thread["messages"][number]["id"],
+            role: "assistant",
+            text: "Final answer",
+            thinkingText: "Model reasoning goes here.",
+            turnId: TurnId.makeUnsafe("turn-1"),
+            streaming: false,
+            createdAt: "2026-02-27T00:00:01.000Z",
+            updatedAt: "2026-02-27T00:00:02.000Z",
+          },
+        ],
+      }),
+    );
+
+    const next = syncServerReadModel(initialState, readModel);
+
+    expect(next.threads[0]?.messages[0]?.thinkingText).toBe("Model reasoning goes here.");
+  });
 });

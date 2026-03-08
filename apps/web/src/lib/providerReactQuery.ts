@@ -3,9 +3,46 @@ import {
   OrchestrationGetTurnDiffInput,
   ThreadId,
 } from "@t3tools/contracts";
-import { queryOptions } from "@tanstack/react-query";
+import { queryOptions, useQuery } from "@tanstack/react-query";
 import { Option, Schema } from "effect";
 import { ensureNativeApi } from "../nativeApi";
+
+// ── Pi model discovery ───────────────────────────────────────────────
+
+export interface PiModelEntry {
+  readonly slug: string;
+  readonly name: string;
+  readonly supportsThinking?: boolean;
+}
+
+export interface PiModelListResponse {
+  readonly configured: ReadonlyArray<PiModelEntry>;
+  readonly unconfigured: ReadonlyArray<PiModelEntry>;
+  readonly reason?: "no_credentials" | "sdk_error";
+  readonly detail?: string;
+}
+
+// Derive the backend HTTP base URL from VITE_WS_URL (ws://host:port -> http://host:port).
+// Falls back to same-origin for production where the page is served by the backend.
+function getPiApiBase(): string {
+  const wsUrl = import.meta.env.VITE_WS_URL as string | undefined;
+  if (wsUrl && wsUrl.length > 0) {
+    return wsUrl.replace(/^ws:\/\//, "http://").replace(/^wss:\/\//, "https://").replace(/\/+$/, "");
+  }
+  return "";
+}
+
+export function usePiModels() {
+  return useQuery({
+    queryKey: ["provider", "pi", "models"] as const,
+    queryFn: (): Promise<PiModelListResponse> =>
+      fetch(`${getPiApiBase()}/api/provider/pi/models`).then((r) => r.json() as Promise<PiModelListResponse>),
+    staleTime: 60_000,
+    retry: 1,
+  });
+}
+
+// ── Checkpoint diff ──────────────────────────────────────────────────
 
 interface CheckpointDiffQueryInput {
   threadId: ThreadId | null;

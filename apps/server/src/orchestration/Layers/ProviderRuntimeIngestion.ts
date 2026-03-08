@@ -96,6 +96,36 @@ function asString(value: unknown): string | undefined {
   return typeof value === "string" ? value : undefined;
 }
 
+function extractAssistantTextFromRuntimeData(value: unknown): string | undefined {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+
+  const record = value as Record<string, unknown>;
+  const directText = asString(record.text)?.trim();
+  if (directText) {
+    return directText;
+  }
+
+  const content = record.content;
+  if (!Array.isArray(content)) {
+    return undefined;
+  }
+
+  const text = content
+    .flatMap((part) => {
+      if (!part || typeof part !== "object") {
+        return [];
+      }
+      const entry = part as Record<string, unknown>;
+      return entry.type === "text" && typeof entry.text === "string" ? [entry.text] : [];
+    })
+    .join("")
+    .trim();
+
+  return text.length > 0 ? text : undefined;
+}
+
 function runtimePayloadRecord(event: ProviderRuntimeEvent): Record<string, unknown> | undefined {
   const payload = (event as { payload?: unknown }).payload;
   if (!payload || typeof payload !== "object") {
@@ -254,15 +284,17 @@ function runtimeEventToActivities(
       if (!message) {
         return [];
       }
+      const summary = truncateDetail(message);
       return [
         {
           id: event.eventId,
           createdAt: event.createdAt,
           tone: "error",
           kind: "runtime.error",
-          summary: "Runtime error",
+          summary,
           payload: {
-            message: truncateDetail(message),
+            message: summary,
+            detail: summary,
           },
           turnId: toTurnId(event.turnId) ?? null,
           ...maybeSequence,
@@ -271,15 +303,16 @@ function runtimeEventToActivities(
     }
 
     case "runtime.warning": {
+      const summary = truncateDetail(event.payload.message);
       return [
         {
           id: event.eventId,
           createdAt: event.createdAt,
           tone: "info",
           kind: "runtime.warning",
-          summary: "Runtime warning",
+          summary,
           payload: {
-            message: truncateDetail(event.payload.message),
+            message: summary,
             ...(event.payload.detail !== undefined ? { detail: event.payload.detail } : {}),
           },
           turnId: toTurnId(event.turnId) ?? null,
@@ -884,12 +917,37 @@ const make = Effect.gen(function* () {
         }
       }
 
+      const thinkingDelta =
+        event.type === "content.delta" && event.payload.streamKind === "thinking"
+          ? event.payload.delta
+          : undefined;
       const assistantDelta =
         event.type === "content.delta" && event.payload.streamKind === "assistant_text"
           ? event.payload.delta
           : undefined;
       const proposedPlanDelta =
         event.type === "turn.proposed.delta" ? event.payload.delta : undefined;
+
+      // Thinking content arrives complete (not streaming) -- dispatch immediately, bypass buffer.
+      if (thinkingDelta && thinkingDelta.length > 0) {
+        const assistantMessageId = MessageId.makeUnsafe(
+          `assistant:${event.itemId ?? event.turnId ?? event.eventId}`,
+        );
+        const turnId = toTurnId(event.turnId);
+        if (turnId) {
+          yield* rememberAssistantMessageId(thread.id, turnId, assistantMessageId);
+        }
+        yield* orchestrationEngine.dispatch({
+          type: "thread.message.assistant.delta",
+          commandId: providerCommandId(event, "thinking-delta"),
+          threadId: thread.id,
+          messageId: assistantMessageId,
+          delta: "",
+          thinkingDelta,
+          ...(turnId ? { turnId } : {}),
+          createdAt: now,
+        });
+      }
 
       if (assistantDelta && assistantDelta.length > 0) {
         const assistantMessageId = MessageId.makeUnsafe(
@@ -934,10 +992,20 @@ const make = Effect.gen(function* () {
 
       const assistantCompletion =
         event.type === "item.completed" && event.payload.itemType === "assistant_message"
-          ? {
-              messageId: MessageId.makeUnsafe(`assistant:${event.itemId ?? event.turnId ?? event.eventId}`),
-              fallbackText: event.payload.detail,
-            }
+          ? (() => {
+              const messageId = MessageId.makeUnsafe(
+                `assistant:${event.itemId ?? event.turnId ?? event.eventId}`,
+              );
+              const existingMessage = thread.messages.find((message) => message.id === messageId);
+              const hasProjectedAssistantText = (existingMessage?.text.trim().length ?? 0) > 0;
+
+              return {
+                messageId,
+                fallbackText: hasProjectedAssistantText
+                  ? undefined
+                  : (extractAssistantTextFromRuntimeData(event.payload.data) ?? event.payload.detail),
+              };
+            })()
           : undefined;
       const proposedPlanCompletion =
         event.type === "turn.proposed.completed"

@@ -1,14 +1,29 @@
 import assert from "node:assert/strict";
-import { it } from "@effect/vitest";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { DEFAULT_MODEL_BY_PROVIDER } from "@t3tools/contracts";
+import { afterAll, it, vi } from "@effect/vitest";
 import { Effect, Layer, Sink, Stream } from "effect";
 import * as PlatformError from "effect/PlatformError";
 import { ChildProcessSpawner } from "effect/unstable/process";
 
-import { checkCodexProviderStatus, parseAuthStatusFromOutput } from "./ProviderHealth";
+import {
+  checkCodexProviderStatus,
+  checkPiProviderStatus,
+  parseAuthStatusFromOutput,
+} from "./ProviderHealth";
 
 // ── Test helpers ────────────────────────────────────────────────────
 
 const encoder = new TextEncoder();
+const tempDirs: string[] = [];
+
+function makeTempDir(prefix: string): string {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+  tempDirs.push(dir);
+  return dir;
+}
 
 function mockHandle(result: { stdout: string; stderr: string; code: number }) {
   return ChildProcessSpawner.makeHandle({
@@ -26,13 +41,16 @@ function mockHandle(result: { stdout: string; stderr: string; code: number }) {
 }
 
 function mockSpawnerLayer(
-  handler: (args: ReadonlyArray<string>) => { stdout: string; stderr: string; code: number },
+  handler: (
+    command: string,
+    args: ReadonlyArray<string>,
+  ) => { stdout: string; stderr: string; code: number },
 ) {
   return Layer.succeed(
     ChildProcessSpawner.ChildProcessSpawner,
     ChildProcessSpawner.make((command) => {
-      const cmd = command as unknown as { args: ReadonlyArray<string> };
-      return Effect.succeed(mockHandle(handler(cmd.args)));
+      const cmd = command as unknown as { command: string; args: ReadonlyArray<string> };
+      return Effect.succeed(mockHandle(handler(cmd.command, cmd.args)));
     }),
   );
 }
@@ -53,6 +71,13 @@ function failingSpawnerLayer(description: string) {
   );
 }
 
+afterAll(() => {
+  vi.unstubAllEnvs();
+  for (const dir of tempDirs) {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 // ── Tests ───────────────────────────────────────────────────────────
 
 it.effect("returns ready when codex is installed and authenticated", () =>
@@ -64,7 +89,7 @@ it.effect("returns ready when codex is installed and authenticated", () =>
     assert.strictEqual(status.authStatus, "authenticated");
   }).pipe(
     Effect.provide(
-      mockSpawnerLayer((args) => {
+      mockSpawnerLayer((_command, args) => {
         const joined = args.join(" ");
         if (joined === "--version") return { stdout: "codex 1.0.0\n", stderr: "", code: 0 };
         if (joined === "login status") return { stdout: "Logged in\n", stderr: "", code: 0 };
@@ -98,7 +123,7 @@ it.effect("returns unauthenticated when auth probe reports login required", () =
     );
   }).pipe(
     Effect.provide(
-      mockSpawnerLayer((args) => {
+      mockSpawnerLayer((_command, args) => {
         const joined = args.join(" ");
         if (joined === "--version") return { stdout: "codex 1.0.0\n", stderr: "", code: 0 };
         if (joined === "login status") {
@@ -125,7 +150,7 @@ it.effect(
       );
     }).pipe(
       Effect.provide(
-        mockSpawnerLayer((args) => {
+        mockSpawnerLayer((_command, args) => {
           const joined = args.join(" ");
           if (joined === "--version") return { stdout: "codex 1.0.0\n", stderr: "", code: 0 };
           if (joined === "login status")
@@ -149,7 +174,7 @@ it.effect("returns warning when login status command is unsupported", () =>
     );
   }).pipe(
     Effect.provide(
-      mockSpawnerLayer((args) => {
+      mockSpawnerLayer((_command, args) => {
         const joined = args.join(" ");
         if (joined === "--version") return { stdout: "codex 1.0.0\n", stderr: "", code: 0 };
         if (joined === "login status") {
@@ -159,6 +184,102 @@ it.effect("returns warning when login status command is unsupported", () =>
       }),
     ),
   ),
+);
+
+it.effect("returns warning when pi is installed but the default model probe finds no match", () =>
+  Effect.gen(function* () {
+    const sharedAgentDir = makeTempDir("t3-pi-health-warning-");
+    vi.stubEnv("PI_CODING_AGENT_DIR", sharedAgentDir);
+
+    const status = yield* checkPiProviderStatus;
+    assert.strictEqual(status.provider, "pi");
+    assert.strictEqual(status.status, "warning");
+    assert.strictEqual(status.available, true);
+    assert.strictEqual(status.authStatus, "unknown");
+    assert.strictEqual(
+      status.message,
+      "Pi CLI is installed, but the Pi model `claude-sonnet-4-6` is not available. Configure a working Pi model or save a custom Pi model in Settings.",
+    );
+
+    vi.unstubAllEnvs();
+  }).pipe(
+    Effect.provide(
+      mockSpawnerLayer((command, args) => {
+        const joined = args.join(" ");
+        if (command.endsWith("pi") && joined === "--version") {
+          return { stdout: "0.56.2\n", stderr: "", code: 0 };
+        }
+        if (command.endsWith("pi") && joined === "--help") {
+          return { stdout: "Usage: pi [options]\n", stderr: "", code: 0 };
+        }
+        if (command.endsWith("pi") && joined === `--list-models ${DEFAULT_MODEL_BY_PROVIDER.pi}`) {
+          return {
+            stdout: `No models matching "${DEFAULT_MODEL_BY_PROVIDER.pi}"\n`,
+            stderr: "",
+            code: 0,
+          };
+        }
+        if (command.endsWith("pi") && joined === "--list-models claude-sonnet-4-6") {
+          return {
+            stdout: 'No models matching "claude-sonnet-4-6"\n',
+            stderr: "",
+            code: 0,
+          };
+        }
+        throw new Error(`Unexpected command: ${command} ${joined}`);
+      }),
+    ),
+  ),
+);
+
+it.effect("returns ready when the saved Pi default model matches after stripping the provider prefix", () =>
+  Effect.gen(function* () {
+    const sharedAgentDir = makeTempDir("t3-pi-health-shared-");
+    fs.writeFileSync(
+      path.join(sharedAgentDir, "settings.json"),
+      JSON.stringify({ defaultModel: "claude-sonnet-4-6" }),
+    );
+    vi.stubEnv("PI_CODING_AGENT_DIR", sharedAgentDir);
+
+    const status = yield* checkPiProviderStatus;
+    assert.strictEqual(status.provider, "pi");
+    assert.strictEqual(status.status, "ready");
+    assert.strictEqual(status.available, true);
+    assert.strictEqual(status.authStatus, "unknown");
+
+    vi.unstubAllEnvs();
+  }).pipe(
+    Effect.provide(
+      mockSpawnerLayer((command, args) => {
+        const joined = args.join(" ");
+        if (command.endsWith("pi") && joined === "--version") {
+          return { stdout: "0.56.2\n", stderr: "", code: 0 };
+        }
+        if (command.endsWith("pi") && joined === "--help") {
+          return { stdout: "Usage: pi [options]\n", stderr: "", code: 0 };
+        }
+        if (command.endsWith("pi") && joined === "--list-models claude-sonnet-4-6") {
+          return {
+            stdout: "provider      model\nanthropic    claude-sonnet-4-6\n",
+            stderr: "",
+            code: 0,
+          };
+        }
+        throw new Error(`Unexpected command: ${command} ${joined}`);
+      }),
+    ),
+  ),
+);
+
+it.effect("returns unavailable when pi is missing", () =>
+  Effect.gen(function* () {
+    const status = yield* checkPiProviderStatus;
+    assert.strictEqual(status.provider, "pi");
+    assert.strictEqual(status.status, "error");
+    assert.strictEqual(status.available, false);
+    assert.strictEqual(status.authStatus, "unknown");
+    assert.strictEqual(status.message, "Pi CLI (`pi`) is not installed or not on PATH.");
+  }).pipe(Effect.provide(failingSpawnerLayer("spawn pi ENOENT"))),
 );
 
 // ── Pure function tests ─────────────────────────────────────────────

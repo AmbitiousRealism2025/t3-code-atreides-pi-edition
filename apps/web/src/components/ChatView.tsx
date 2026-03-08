@@ -6,6 +6,7 @@ import {
   type KeybindingCommand,
   type CodexReasoningEffort,
   type MessageId,
+  type PiThinkingLevel,
   type ProjectId,
   type ProjectEntry,
   type ProjectScript,
@@ -25,6 +26,8 @@ import {
 import {
   getDefaultModel,
   getDefaultReasoningEffort,
+  getModelOptions,
+  getPiThinkingLevelOptions,
   getReasoningEffortOptions,
   normalizeModelSlug,
   resolveModelSlugForProvider,
@@ -50,6 +53,7 @@ import {
 import { gitBranchesQueryOptions, gitCreateWorktreeMutationOptions } from "~/lib/gitReactQuery";
 import { projectSearchEntriesQueryOptions } from "~/lib/projectReactQuery";
 import { serverConfigQueryOptions, serverQueryKeys } from "~/lib/serverReactQuery";
+import { usePiModels } from "~/lib/providerReactQuery";
 
 import { isElectron } from "../env";
 import { parseDiffRouteSearch, stripDiffSearchParams } from "../diffRouteSearch";
@@ -66,6 +70,7 @@ import {
   derivePendingApprovals,
   derivePendingUserInputs,
   derivePhase,
+  deriveInProgressReasoningEntry,
   deriveTimelineEntries,
   deriveActiveWorkStartedAt,
   deriveActivePlanState,
@@ -122,6 +127,7 @@ import {
   shortcutLabelForCommand,
 } from "../keybindings";
 import ChatMarkdown from "./ChatMarkdown";
+import ThinkingBlock from "./ThinkingBlock";
 import ThreadTerminalDrawer from "./ThreadTerminalDrawer";
 import { Alert, AlertDescription, AlertTitle } from "./ui/alert";
 import {
@@ -141,6 +147,7 @@ import {
   XIcon,
   CopyIcon,
   CheckIcon,
+  Sparkles,
   ZapIcon,
 } from "lucide-react";
 import { Button } from "./ui/button";
@@ -200,6 +207,7 @@ import { newCommandId, newMessageId, newThreadId } from "~/lib/utils";
 import { readNativeApi } from "~/nativeApi";
 import {
   getAppModelOptions,
+  normalizeCustomModelSlugs,
   resolveAppModelSelection,
   resolveAppServiceTier,
   shouldShowFastTierIcon,
@@ -617,6 +625,9 @@ export default function ChatView({ threadId }: ChatViewProps) {
     (store) => store.setInteractionMode,
   );
   const setComposerDraftEffort = useComposerDraftStore((store) => store.setEffort);
+  const setComposerDraftPiThinkingLevel = useComposerDraftStore(
+    (store) => store.setPiThinkingLevel,
+  );
   const setComposerDraftCodexFastMode = useComposerDraftStore((store) => store.setCodexFastMode);
   const addComposerDraftImage = useComposerDraftStore((store) => store.addImage);
   const addComposerDraftImages = useComposerDraftStore((store) => store.addImages);
@@ -803,7 +814,8 @@ export default function ChatView({ threadId }: ChatViewProps) {
     selectedProvider,
     activeThread?.model ?? activeProject?.model ?? getDefaultModel(selectedProvider),
   );
-  const customModelsForSelectedProvider = settings.customCodexModels;
+  const customModelsForSelectedProvider =
+    selectedProvider === "pi" ? settings.customPiModels : settings.customCodexModels;
   const selectedModel = useMemo(() => {
     const draftModel = composerDraft.model;
     if (!draftModel) {
@@ -818,23 +830,70 @@ export default function ChatView({ threadId }: ChatViewProps) {
   const reasoningOptions = getReasoningEffortOptions(selectedProvider);
   const supportsReasoningEffort = reasoningOptions.length > 0;
   const selectedEffort = composerDraft.effort ?? getDefaultReasoningEffort(selectedProvider);
+  const selectedPiThinkingLevel = composerDraft.piThinkingLevel;
   const selectedCodexFastModeEnabled =
     selectedProvider === "codex" ? composerDraft.codexFastMode : false;
-  const selectedModelOptionsForDispatch = useMemo(() => {
-    if (selectedProvider !== "codex") {
-      return undefined;
-    }
-    const codexOptions = {
-      ...(supportsReasoningEffort && selectedEffort ? { reasoningEffort: selectedEffort } : {}),
-      ...(selectedCodexFastModeEnabled ? { fastMode: true } : {}),
-    };
-    return Object.keys(codexOptions).length > 0 ? { codex: codexOptions } : undefined;
-  }, [selectedCodexFastModeEnabled, selectedEffort, selectedProvider, supportsReasoningEffort]);
   const selectedModelForPicker = selectedModel;
-  const modelOptionsByProvider = useMemo(
-    () => getCustomModelOptionsByProvider(settings),
-    [settings],
-  );
+  const { data: piModels, isLoading: isPiModelsLoading, isError: isPiModelsError } = usePiModels();
+  // Resolve supportsThinking from live SDK data (primary), fall back to provider prefix (fallback).
+  const selectedModelSupportsThinking = useMemo(() => {
+    if (!piModels) return undefined;
+    const allModels = [...piModels.configured, ...piModels.unconfigured];
+    const found = allModels.find((m) => m.slug === selectedModel);
+    return found?.supportsThinking;
+  }, [piModels, selectedModel]);
+  const piThinkingOptions = getPiThinkingLevelOptions(selectedModel, selectedModelSupportsThinking);
+  const supportsPiThinkingLevel = piThinkingOptions.length > 0;
+  const selectedModelOptionsForDispatch = useMemo(() => {
+    if (selectedProvider === "codex") {
+      const codexOptions = {
+        ...(supportsReasoningEffort && selectedEffort ? { reasoningEffort: selectedEffort } : {}),
+        ...(selectedCodexFastModeEnabled ? { fastMode: true } : {}),
+      };
+      return Object.keys(codexOptions).length > 0 ? { codex: codexOptions } : undefined;
+    }
+    if (selectedProvider === "pi" && supportsPiThinkingLevel && selectedPiThinkingLevel) {
+      return {
+        pi: {
+          thinkingLevel: selectedPiThinkingLevel,
+        },
+      };
+    }
+    return undefined;
+  }, [
+    selectedCodexFastModeEnabled,
+    selectedEffort,
+    selectedPiThinkingLevel,
+    selectedProvider,
+    supportsPiThinkingLevel,
+    supportsReasoningEffort,
+  ]);
+  const modelOptionsByProvider = useMemo(() => {
+    const codexOptions = getAppModelOptions("codex", settings.customCodexModels);
+
+    // Build Pi model list: configured (credentials confirmed) first, then unconfigured.
+    // Fall back to static catalog (all treated as configured) on error or missing data.
+    const hasApiData = !isPiModelsError && piModels != null;
+    const configuredBase = hasApiData
+      ? piModels.configured
+      : getModelOptions("pi");
+    const unconfiguredBase = hasApiData ? piModels.unconfigured : [];
+
+    const allBaseSlugs = new Set([
+      ...configuredBase.map((m) => m.slug),
+      ...unconfiguredBase.map((m) => m.slug),
+    ]);
+    const piCustomModels = normalizeCustomModelSlugs(settings.customPiModels, "pi")
+      .filter((slug) => !allBaseSlugs.has(slug))
+      .map((slug) => ({ slug, name: slug, isCustom: true, hasCredentials: true }));
+
+    const piOptions = [
+      ...configuredBase.map(({ slug, name }) => ({ slug, name, isCustom: false, hasCredentials: true })),
+      ...piCustomModels,
+      ...unconfiguredBase.map(({ slug, name }) => ({ slug, name, isCustom: false, hasCredentials: false })),
+    ];
+    return { codex: codexOptions, pi: piOptions };
+  }, [settings, piModels, isPiModelsError]);
   const selectedModelForPickerWithCustomFallback = useMemo(() => {
     const currentOptions = modelOptionsByProvider[selectedProvider];
     return currentOptions.some((option) => option.slug === selectedModelForPicker)
@@ -873,6 +932,22 @@ export default function ChatView({ threadId }: ChatViewProps) {
     () => deriveWorkLogEntries(threadActivities, activeLatestTurn?.turnId ?? undefined),
     [activeLatestTurn?.turnId, threadActivities],
   );
+  const displayedWorkLogEntries = useMemo(() => {
+    const reasoningEntry = deriveInProgressReasoningEntry({
+      provider: selectedProvider,
+      thinkingLevel: selectedPiThinkingLevel,
+      workStartedAt: activeWorkStartedAt,
+      isWorking,
+      existingEntries: workLogEntries,
+    });
+    return reasoningEntry ? [reasoningEntry, ...workLogEntries] : workLogEntries;
+  }, [
+    activeWorkStartedAt,
+    isWorking,
+    selectedPiThinkingLevel,
+    selectedProvider,
+    workLogEntries,
+  ]);
   const latestTurnHasToolActivity = useMemo(
     () => hasToolActivityForTurn(threadActivities, activeLatestTurn?.turnId),
     [activeLatestTurn?.turnId, threadActivities],
@@ -1076,13 +1151,17 @@ export default function ChatView({ threadId }: ChatViewProps) {
     }
     return [...serverMessagesWithPreviewHandoff, ...pendingMessages];
   }, [serverMessages, attachmentPreviewHandoffByMessageId, optimisticUserMessages]);
-  const timelineEntries = useMemo(
-    () =>
-      deriveTimelineEntries(timelineMessages, activeThread?.proposedPlans ?? [], workLogEntries),
-    [activeThread?.proposedPlans, timelineMessages, workLogEntries],
-  );
   const { turnDiffSummaries, inferredCheckpointTurnCountByTurnId } =
     useTurnDiffSummaries(activeThread);
+  const timelineEntries = useMemo(
+    () =>
+      deriveTimelineEntries(
+        timelineMessages,
+        activeThread?.proposedPlans ?? [],
+        displayedWorkLogEntries,
+      ),
+    [activeThread?.proposedPlans, displayedWorkLogEntries, timelineMessages],
+  );
   const turnDiffSummaryByAssistantMessageId = useMemo(() => {
     const byMessageId = new Map<MessageId, TurnDiffSummary>();
     for (const summary of turnDiffSummaries) {
@@ -1138,6 +1217,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
     latestTurnHasToolActivity,
     latestTurnSettled,
   ]);
+
   const completionDividerBeforeEntryId = useMemo(() => {
     if (!latestTurnSettled) return null;
     if (!activeLatestTurn?.startedAt) return null;
@@ -3067,7 +3147,11 @@ export default function ChatView({ threadId }: ChatViewProps) {
       setComposerDraftProvider(activeThread.id, provider);
       setComposerDraftModel(
         activeThread.id,
-        resolveAppModelSelection(provider, settings.customCodexModels, model),
+        resolveAppModelSelection(
+          provider,
+          provider === "pi" ? settings.customPiModels : settings.customCodexModels,
+          model,
+        ),
       );
       scheduleComposerFocus();
     },
@@ -3078,6 +3162,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
       setComposerDraftModel,
       setComposerDraftProvider,
       settings.customCodexModels,
+      settings.customPiModels,
     ],
   );
   const onEffortSelect = useCallback(
@@ -3086,6 +3171,13 @@ export default function ChatView({ threadId }: ChatViewProps) {
       scheduleComposerFocus();
     },
     [scheduleComposerFocus, setComposerDraftEffort, threadId],
+  );
+  const onPiThinkingLevelSelect = useCallback(
+    (thinkingLevel: PiThinkingLevel) => {
+      setComposerDraftPiThinkingLevel(threadId, thinkingLevel);
+      scheduleComposerFocus();
+    },
+    [scheduleComposerFocus, setComposerDraftPiThinkingLevel, threadId],
   );
   const onCodexFastModeChange = useCallback(
     (enabled: boolean) => {
@@ -3436,6 +3528,8 @@ export default function ChatView({ threadId }: ChatViewProps) {
           isWorking={isWorking}
           activeTurnInProgress={isWorking || !latestTurnSettled}
           activeTurnStartedAt={activeWorkStartedAt}
+          latestTurnSettled={latestTurnSettled}
+          latestAssistantMessageId={activeLatestTurn?.assistantMessageId}
           scrollContainer={messagesScrollElement}
           timelineEntries={timelineEntries}
           completionDividerBeforeEntryId={completionDividerBeforeEntryId}
@@ -3630,6 +3724,10 @@ export default function ChatView({ threadId }: ChatViewProps) {
                     lockedProvider={lockedProvider}
                     modelOptionsByProvider={modelOptionsByProvider}
                     serviceTierSetting={selectedServiceTierSetting}
+                    piModelsState={{
+                      isLoading: isPiModelsLoading,
+                      ...(piModels?.reason ? { reason: piModels.reason } : {}),
+                    }}
                     onProviderModelChange={onProviderModelSelect}
                   />
 
@@ -3642,6 +3740,16 @@ export default function ChatView({ threadId }: ChatViewProps) {
                         options={reasoningOptions}
                         onEffortChange={onEffortSelect}
                         onFastModeChange={onCodexFastModeChange}
+                      />
+                    </>
+                  ) : null}
+                  {selectedProvider === "pi" && supportsPiThinkingLevel ? (
+                    <>
+                      <Separator orientation="vertical" className="mx-0.5 hidden h-4 sm:block" />
+                      <PiThinkingPicker
+                        thinkingLevel={selectedPiThinkingLevel}
+                        options={piThinkingOptions}
+                        onThinkingLevelChange={onPiThinkingLevelSelect}
                       />
                     </>
                   ) : null}
@@ -4687,6 +4795,8 @@ interface MessagesTimelineProps {
   isWorking: boolean;
   activeTurnInProgress: boolean;
   activeTurnStartedAt: string | null;
+  latestTurnSettled: boolean;
+  latestAssistantMessageId: MessageId | null | undefined;
   scrollContainer: HTMLDivElement | null;
   timelineEntries: ReturnType<typeof deriveTimelineEntries>;
   completionDividerBeforeEntryId: string | null;
@@ -4741,6 +4851,8 @@ const MessagesTimeline = memo(function MessagesTimeline({
   isWorking,
   activeTurnInProgress,
   activeTurnStartedAt,
+  latestTurnSettled,
+  latestAssistantMessageId,
   scrollContainer,
   timelineEntries,
   completionDividerBeforeEntryId,
@@ -5119,7 +5231,7 @@ const MessagesTimeline = memo(function MessagesTimeline({
       {row.kind === "message" &&
         row.message.role === "assistant" &&
         (() => {
-          const messageText = row.message.text || (row.message.streaming ? "" : "(empty response)");
+          const messageText = row.message.text || "";
           return (
             <>
               {row.showCompletionDivider && (
@@ -5132,11 +5244,19 @@ const MessagesTimeline = memo(function MessagesTimeline({
                 </div>
               )}
               <div className="min-w-0 px-1 py-0.5">
-                <ChatMarkdown
-                  text={messageText}
-                  cwd={markdownCwd}
-                  isStreaming={Boolean(row.message.streaming)}
-                />
+                {row.message.thinkingText && row.message.thinkingText.length >= 20 && (
+                  <ThinkingBlock
+                    thinkingText={row.message.thinkingText}
+                    defaultExpanded={latestTurnSettled && row.message.id === latestAssistantMessageId}
+                  />
+                )}
+                {messageText ? (
+                  <ChatMarkdown
+                    text={messageText}
+                    cwd={markdownCwd}
+                    isStreaming={Boolean(row.message.streaming)}
+                  />
+                ) : null}
                 {(() => {
                   const turnSummary = turnDiffSummaryByAssistantMessageId.get(row.message.id);
                   if (!turnSummary) return null;
@@ -5295,16 +5415,9 @@ const COMING_SOON_PROVIDER_OPTIONS = [
   { id: "gemini", label: "Gemini", icon: Gemini },
 ] as const;
 
-function getCustomModelOptionsByProvider(settings: {
-  customCodexModels: readonly string[];
-}): Record<ProviderKind, ReadonlyArray<{ slug: string; name: string }>> {
-  return {
-    codex: getAppModelOptions("codex", settings.customCodexModels),
-  };
-}
-
 const PROVIDER_ICON_BY_PROVIDER: Record<ProviderPickerKind, Icon> = {
   codex: OpenAI,
+  pi: Sparkles,
   claudeCode: ClaudeAI,
   cursor: CursorIcon,
 };
@@ -5346,9 +5459,10 @@ const ProviderModelPicker = memo(function ProviderModelPicker(props: {
   provider: ProviderKind;
   model: ModelSlug;
   lockedProvider: ProviderKind | null;
-  modelOptionsByProvider: Record<ProviderKind, ReadonlyArray<{ slug: string; name: string }>>;
+  modelOptionsByProvider: Record<ProviderKind, ReadonlyArray<{ slug: string; name: string; hasCredentials?: boolean }>>;
   serviceTierSetting: AppServiceTier;
   disabled?: boolean;
+  piModelsState?: { isLoading: boolean; reason?: "no_credentials" | "sdk_error" };
   onProviderModelChange: (provider: ProviderKind, model: ModelSlug) => void;
 }) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -5402,38 +5516,103 @@ const ProviderModelPicker = memo(function ProviderModelPicker(props: {
                 {option.label}
               </MenuSubTrigger>
               <MenuSubPopup className="[--available-height:min(24rem,70vh)]">
-                <MenuGroup>
-                  <MenuRadioGroup
-                    value={props.provider === option.value ? props.model : ""}
-                    onValueChange={(value) => {
-                      if (props.disabled) return;
-                      if (isDisabledByProviderLock) return;
-                      if (!value) return;
-                      const resolvedModel = resolveModelForProviderPicker(
-                        option.value,
-                        value,
-                        props.modelOptionsByProvider[option.value],
-                      );
-                      if (!resolvedModel) return;
-                      props.onProviderModelChange(option.value, resolvedModel);
-                      setIsMenuOpen(false);
-                    }}
-                  >
-                    {props.modelOptionsByProvider[option.value].map((modelOption) => (
-                      <MenuRadioItem
-                        key={`${option.value}:${modelOption.slug}`}
-                        value={modelOption.slug}
-                        onClick={() => setIsMenuOpen(false)}
-                      >
-                        {option.value === "codex" &&
-                        shouldShowFastTierIcon(modelOption.slug, props.serviceTierSetting) ? (
-                          <ZapIcon className="size-3.5 shrink-0 text-amber-500" />
-                        ) : null}
-                        {modelOption.name}
-                      </MenuRadioItem>
-                    ))}
-                  </MenuRadioGroup>
-                </MenuGroup>
+                {(() => {
+                  const allOptions = props.modelOptionsByProvider[option.value];
+                  const radioValue = props.provider === option.value ? props.model : "";
+                  const handleValueChange = (value: string) => {
+                    if (props.disabled) return;
+                    if (isDisabledByProviderLock) return;
+                    if (!value) return;
+                    const resolvedModel = resolveModelForProviderPicker(
+                      option.value,
+                      value,
+                      allOptions,
+                    );
+                    if (!resolvedModel) return;
+                    props.onProviderModelChange(option.value, resolvedModel);
+                    setIsMenuOpen(false);
+                  };
+
+                  if (option.value !== "pi") {
+                    // Standard single-group rendering for non-Pi providers
+                    return (
+                      <MenuGroup>
+                        <MenuRadioGroup value={radioValue} onValueChange={handleValueChange}>
+                          {allOptions.map((modelOption) => (
+                            <MenuRadioItem
+                              key={`${option.value}:${modelOption.slug}`}
+                              value={modelOption.slug}
+                              onClick={() => setIsMenuOpen(false)}
+                            >
+                              {option.value === "codex" &&
+                              shouldShowFastTierIcon(modelOption.slug, props.serviceTierSetting) ? (
+                                <ZapIcon className="size-3.5 shrink-0 text-amber-500" />
+                              ) : null}
+                              {modelOption.name}
+                            </MenuRadioItem>
+                          ))}
+                        </MenuRadioGroup>
+                      </MenuGroup>
+                    );
+                  }
+
+                  // Pi: split into configured (credentials present) and unconfigured groups
+                  const configuredOptions = allOptions.filter((m) => m.hasCredentials !== false);
+                  const unconfiguredOptions = allOptions.filter((m) => m.hasCredentials === false);
+
+                  return (
+                    <>
+                      <MenuGroup>
+                        <MenuRadioGroup value={radioValue} onValueChange={handleValueChange}>
+                          {configuredOptions.map((modelOption) => (
+                            <MenuRadioItem
+                              key={`pi:${modelOption.slug}`}
+                              value={modelOption.slug}
+                              onClick={() => setIsMenuOpen(false)}
+                            >
+                              {modelOption.name}
+                            </MenuRadioItem>
+                          ))}
+                        </MenuRadioGroup>
+                        {props.piModelsState?.isLoading && (
+                          <p className="px-3 py-1.5 text-xs text-muted-foreground/70">Loading Pi models…</p>
+                        )}
+                        {!props.piModelsState?.isLoading && props.piModelsState?.reason === "no_credentials" && (
+                          <p className="px-3 py-1.5 text-xs text-muted-foreground/70">
+                            No Pi models found. Configure a provider in your Pi settings.
+                          </p>
+                        )}
+                        {!props.piModelsState?.isLoading && props.piModelsState?.reason === "sdk_error" && (
+                          <p className="px-3 py-1.5 text-xs text-muted-foreground/70">
+                            Could not load Pi models. Using default list.
+                          </p>
+                        )}
+                      </MenuGroup>
+                      {unconfiguredOptions.length > 0 && (
+                        <>
+                          <MenuDivider />
+                          <MenuGroup>
+                            <MenuRadioGroup value={radioValue} onValueChange={handleValueChange}>
+                              {unconfiguredOptions.map((modelOption) => (
+                                <MenuRadioItem
+                                  key={`pi:${modelOption.slug}`}
+                                  value={modelOption.slug}
+                                  onClick={() => setIsMenuOpen(false)}
+                                  disabled
+                                >
+                                  <span className="opacity-40">{modelOption.name}</span>
+                                  <span className="ms-auto text-[10px] text-muted-foreground/60 uppercase tracking-wide">
+                                    No key
+                                  </span>
+                                </MenuRadioItem>
+                              ))}
+                            </MenuRadioGroup>
+                          </MenuGroup>
+                        </>
+                      )}
+                    </>
+                  );
+                })()}
               </MenuSubPopup>
             </MenuSub>
           );
@@ -5547,6 +5726,65 @@ const CodexTraitsPicker = memo(function CodexTraitsPicker(props: {
           >
             <MenuRadioItem value="off">off</MenuRadioItem>
             <MenuRadioItem value="on">on</MenuRadioItem>
+          </MenuRadioGroup>
+        </MenuGroup>
+      </MenuPopup>
+    </Menu>
+  );
+});
+
+const PiThinkingPicker = memo(function PiThinkingPicker(props: {
+  thinkingLevel: PiThinkingLevel | null;
+  options: ReadonlyArray<PiThinkingLevel>;
+  onThinkingLevelChange: (thinkingLevel: PiThinkingLevel) => void;
+}) {
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const thinkingLabelByOption: Record<PiThinkingLevel, string> = {
+    off: "Off",
+    minimal: "Minimal",
+    low: "Low",
+    medium: "Medium",
+    high: "High",
+    xhigh: "XHigh",
+  };
+  const triggerLabel = props.thinkingLevel ? thinkingLabelByOption[props.thinkingLevel] : "Thinking";
+
+  return (
+    <Menu
+      open={isMenuOpen}
+      onOpenChange={(open) => {
+        setIsMenuOpen(open);
+      }}
+    >
+      <MenuTrigger
+        render={
+          <Button
+            size="sm"
+            variant="ghost"
+            className="shrink-0 whitespace-nowrap px-2 text-muted-foreground/70 hover:text-foreground/80 sm:px-3"
+          />
+        }
+      >
+        <span>{triggerLabel}</span>
+        <ChevronDownIcon aria-hidden="true" className="size-3 opacity-60" />
+      </MenuTrigger>
+      <MenuPopup align="start">
+        <MenuGroup>
+          <div className="px-2 py-1.5 font-medium text-muted-foreground text-xs">Thinking</div>
+          <MenuRadioGroup
+            value={props.thinkingLevel ?? ""}
+            onValueChange={(value) => {
+              if (!value) return;
+              const nextThinkingLevel = props.options.find((option) => option === value);
+              if (!nextThinkingLevel) return;
+              props.onThinkingLevelChange(nextThinkingLevel);
+            }}
+          >
+            {props.options.map((thinkingLevel) => (
+              <MenuRadioItem key={thinkingLevel} value={thinkingLevel}>
+                {thinkingLabelByOption[thinkingLevel]}
+              </MenuRadioItem>
+            ))}
           </MenuRadioGroup>
         </MenuGroup>
       </MenuPopup>

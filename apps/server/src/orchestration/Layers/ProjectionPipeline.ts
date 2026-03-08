@@ -591,12 +591,20 @@ const makeOrchestrationProjectionPipeline = Effect.gen(function* () {
                   attachments: event.payload.attachments,
                 })
               : existingMessage?.attachments;
+          // Accumulate thinkingText: append if streaming, otherwise take new value or keep existing
+          const nextThinkingText =
+            event.payload.thinkingText !== undefined
+              ? event.payload.streaming
+                ? `${existingMessage?.thinkingText ?? ""}${event.payload.thinkingText}`
+                : event.payload.thinkingText
+              : existingMessage?.thinkingText;
           yield* projectionThreadMessageRepository.upsert({
             messageId: event.payload.messageId,
             threadId: event.payload.threadId,
             turnId: event.payload.turnId,
             role: event.payload.role,
             text: nextText,
+            ...(nextThinkingText !== undefined ? { thinkingText: nextThinkingText } : {}),
             ...(nextAttachments !== undefined ? { attachments: [...nextAttachments] } : {}),
             isStreaming: event.payload.streaming,
             createdAt: existingMessage?.createdAt ?? event.payload.createdAt,

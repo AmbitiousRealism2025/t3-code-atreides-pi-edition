@@ -16,6 +16,7 @@ const ProjectionThreadMessageDbRowSchema = ProjectionThreadMessage.mapFields(
   Struct.assign({
     isStreaming: Schema.Number,
     attachments: Schema.NullOr(Schema.fromJsonString(Schema.Array(ChatAttachment))),
+    thinkingText: Schema.NullOr(Schema.String),
   }),
 );
 
@@ -27,6 +28,7 @@ const makeProjectionThreadMessageRepository = Effect.gen(function* () {
     execute: (row) => {
       const nextAttachmentsJson =
         row.attachments !== undefined ? JSON.stringify(row.attachments) : null;
+      const nextThinkingText = row.thinkingText ?? null;
       return sql`
         INSERT INTO projection_thread_messages (
           message_id,
@@ -34,6 +36,7 @@ const makeProjectionThreadMessageRepository = Effect.gen(function* () {
           turn_id,
           role,
           text,
+          thinking_text,
           attachments_json,
           is_streaming,
           created_at,
@@ -45,6 +48,7 @@ const makeProjectionThreadMessageRepository = Effect.gen(function* () {
           ${row.turnId},
           ${row.role},
           ${row.text},
+          ${nextThinkingText},
           COALESCE(
             ${nextAttachmentsJson},
             (
@@ -63,6 +67,7 @@ const makeProjectionThreadMessageRepository = Effect.gen(function* () {
           turn_id = excluded.turn_id,
           role = excluded.role,
           text = excluded.text,
+          thinking_text = COALESCE(excluded.thinking_text, projection_thread_messages.thinking_text),
           attachments_json = COALESCE(
             excluded.attachments_json,
             projection_thread_messages.attachments_json
@@ -85,6 +90,7 @@ const makeProjectionThreadMessageRepository = Effect.gen(function* () {
           turn_id AS "turnId",
           role,
           text,
+          thinking_text AS "thinkingText",
           attachments_json AS "attachments",
           is_streaming AS "isStreaming",
           created_at AS "createdAt",
@@ -124,6 +130,7 @@ const makeProjectionThreadMessageRepository = Effect.gen(function* () {
           isStreaming: row.isStreaming === 1,
           createdAt: row.createdAt,
           updatedAt: row.updatedAt,
+          ...(row.thinkingText !== null ? { thinkingText: row.thinkingText } : {}),
           ...(row.attachments !== null ? { attachments: row.attachments } : {}),
         })),
       ),

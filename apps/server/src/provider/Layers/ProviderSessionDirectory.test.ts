@@ -5,7 +5,6 @@ import path from "node:path";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { ThreadId } from "@t3tools/contracts";
 import { it, assert } from "@effect/vitest";
-import { assertFailure, assertSome } from "@effect/vitest/utils";
 import { Effect, Layer, Option } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
@@ -46,12 +45,10 @@ it.layer(makeDirectoryLayer(SqlitePersistenceMemory))("ProviderSessionDirectoryL
       const provider = yield* directory.getProvider(initialThreadId);
       assert.equal(provider, "codex");
       const resolvedBinding = yield* directory.getBinding(initialThreadId);
-      assertSome(resolvedBinding, {
-        threadId: initialThreadId,
-        provider: "codex",
-      });
+      assert.equal(Option.isSome(resolvedBinding), true);
       if (Option.isSome(resolvedBinding)) {
         assert.equal(resolvedBinding.value.threadId, initialThreadId);
+        assert.equal(resolvedBinding.value.provider, "codex");
       }
 
       const nextThreadId = ThreadId.makeUnsafe("thread-2");
@@ -79,13 +76,16 @@ it.layer(makeDirectoryLayer(SqlitePersistenceMemory))("ProviderSessionDirectoryL
 
       yield* directory.remove(nextThreadId);
       const missingProvider = yield* directory.getProvider(nextThreadId).pipe(Effect.result);
-      assertFailure(
-        missingProvider,
-        new ProviderSessionDirectoryPersistenceError({
-          operation: "ProviderSessionDirectory.getProvider",
-          detail: `No persisted provider binding found for thread '${nextThreadId}'.`,
-        }),
-      );
+      assert.equal(missingProvider._tag, "Failure");
+      if (missingProvider._tag === "Failure") {
+        assert.deepEqual(
+          missingProvider.failure,
+          new ProviderSessionDirectoryPersistenceError({
+            operation: "ProviderSessionDirectory.getProvider",
+            detail: `No persisted provider binding found for thread '${nextThreadId}'.`,
+          }),
+        );
+      }
     }));
 
   it("persists runtime fields and merges payload updates", () =>
@@ -131,6 +131,20 @@ it.layer(makeDirectoryLayer(SqlitePersistenceMemory))("ProviderSessionDirectoryL
           activeTurnId: "turn-1",
         });
       }
+    }));
+
+  it("accepts persisted pi provider bindings", () =>
+    Effect.gen(function* () {
+      const directory = yield* ProviderSessionDirectory;
+      const threadId = ThreadId.makeUnsafe("thread-pi");
+
+      yield* directory.upsert({
+        provider: "pi",
+        threadId,
+      });
+
+      const provider = yield* directory.getProvider(threadId);
+      assert.equal(provider, "pi");
     }));
 
   it("resets adapterKey to the new provider when provider changes without an explicit adapter key", () =>
@@ -186,12 +200,10 @@ it.layer(makeDirectoryLayer(SqlitePersistenceMemory))("ProviderSessionDirectoryL
         assert.equal(provider, "codex");
 
         const resolvedBinding = yield* directory.getBinding(threadId);
-        assertSome(resolvedBinding, {
-          threadId,
-          provider: "codex",
-        });
+        assert.equal(Option.isSome(resolvedBinding), true);
         if (Option.isSome(resolvedBinding)) {
           assert.equal(resolvedBinding.value.threadId, threadId);
+          assert.equal(resolvedBinding.value.provider, "codex");
         }
 
         const legacyTableRows = yield* sql<{ readonly name: string }>`

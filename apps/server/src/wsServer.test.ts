@@ -44,6 +44,7 @@ import { makeSqlitePersistenceLive, SqlitePersistenceMemory } from "./persistenc
 import { SqlClient, SqlError } from "effect/unstable/sql";
 import { ProviderService, type ProviderServiceShape } from "./provider/Services/ProviderService";
 import { ProviderHealth, type ProviderHealthShape } from "./provider/Services/ProviderHealth";
+import { PiModelDiscovery, type PiModelDiscoveryShape } from "./provider/Services/PiModelDiscovery";
 import { Open, type OpenShape } from "./open";
 import { GitManager, type GitManagerShape } from "./git/Services/GitManager.ts";
 import type { GitCoreShape } from "./git/Services/GitCore.ts";
@@ -77,10 +78,21 @@ const defaultProviderStatuses: ReadonlyArray<ServerProviderStatus> = [
     authStatus: "authenticated",
     checkedAt: "2026-01-01T00:00:00.000Z",
   },
+  {
+    provider: "pi",
+    status: "warning",
+    available: true,
+    authStatus: "unknown",
+    checkedAt: "2026-01-01T00:00:00.000Z",
+  },
 ];
 
 const defaultProviderHealthService: ProviderHealthShape = {
   getStatuses: Effect.succeed(defaultProviderStatuses),
+};
+
+const defaultPiModelDiscoveryService: PiModelDiscoveryShape = {
+  getModels: Effect.succeed({ configured: [], unconfigured: [] }),
 };
 
 class MockTerminalManager implements TerminalManagerShape {
@@ -410,6 +422,7 @@ describe("WebSocket Server", () => {
       ProviderHealth,
       options.providerHealth ?? defaultProviderHealthService,
     );
+    const piModelDiscoveryLayer = Layer.succeed(PiModelDiscovery, defaultPiModelDiscoveryService);
     const openLayer = Layer.succeed(Open, options.open ?? defaultOpenService);
     const serverConfigLayer = Layer.succeed(ServerConfig, {
       mode: "web",
@@ -446,6 +459,7 @@ describe("WebSocket Server", () => {
     const dependenciesLayer = Layer.empty.pipe(
       Layer.provideMerge(runtimeLayer),
       Layer.provideMerge(providerHealthLayer),
+      Layer.provideMerge(piModelDiscoveryLayer),
       Layer.provideMerge(openLayer),
       Layer.provideMerge(serverConfigLayer),
       Layer.provideMerge(AnalyticsService.layerTest),
@@ -548,6 +562,87 @@ describe("WebSocket Server", () => {
     expect(response.headers.get("content-type")).toContain("image/png");
     const bytes = Buffer.from(await response.arrayBuffer());
     expect(bytes).toEqual(Buffer.from("hello-encoded-attachment"));
+  });
+
+  it("accepts Pi activity bridge posts and persists thread activities", async () => {
+    server = await createTestServer({ cwd: "/test/project" });
+    const addr = server.address();
+    const port = typeof addr === "object" && addr !== null ? addr.port : 0;
+    expect(port).toBeGreaterThan(0);
+
+    const ws = await connectWs(port);
+    connections.push(ws);
+    await waitForMessage(ws);
+
+    const workspaceRoot = makeTempDir("t3code-pi-activity-project-");
+    const createdAt = new Date().toISOString();
+    const createProjectResponse = await sendRequest(ws, ORCHESTRATION_WS_METHODS.dispatchCommand, {
+      type: "project.create",
+      commandId: "cmd-pi-activity-project-create",
+      projectId: "project-pi-activity",
+      title: "Pi Activity Project",
+      workspaceRoot,
+      defaultModel: "anthropic/claude-opus-4-1",
+      createdAt,
+    });
+    expect(createProjectResponse.error).toBeUndefined();
+    const createThreadResponse = await sendRequest(ws, ORCHESTRATION_WS_METHODS.dispatchCommand, {
+      type: "thread.create",
+      commandId: "cmd-pi-activity-thread-create",
+      threadId: "thread-pi-activity",
+      projectId: "project-pi-activity",
+      title: "Pi Activity Thread",
+      model: "anthropic/claude-opus-4-1",
+      runtimeMode: "full-access",
+      interactionMode: "default",
+      branch: null,
+      worktreePath: null,
+      createdAt,
+    });
+    expect(createThreadResponse.error).toBeUndefined();
+
+    const activityResponse = await fetch(`http://127.0.0.1:${port}/api/provider/pi/activity`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        threadId: "thread-pi-activity",
+        activity: {
+          id: "evt-pi-activity-1",
+          tone: "tool",
+          kind: "pi.tool.started",
+          summary: "Tool: bash",
+          payload: {
+            detail: "ls -la",
+            data: {
+              command: "ls -la",
+            },
+          },
+          turnId: null,
+          createdAt,
+        },
+      }),
+    });
+    expect(activityResponse.status).toBe(202);
+
+    await waitForPush(ws, ORCHESTRATION_WS_CHANNELS.domainEvent, (push) => {
+      const event = push.data as { type?: string };
+      return event.type === "thread.activity-appended";
+    });
+
+    const snapshotResponse = await sendRequest(ws, ORCHESTRATION_WS_METHODS.getSnapshot);
+    expect(snapshotResponse.error).toBeUndefined();
+    const snapshot = snapshotResponse.result as {
+      threads?: Array<{ id: string; activities?: Array<{ summary: string; kind: string }> }>;
+    };
+    const thread = snapshot.threads?.find((entry) => entry.id === "thread-pi-activity");
+    expect(thread?.activities).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "pi.tool.started",
+          summary: "Tool: bash",
+        }),
+      ]),
+    );
   });
 
   it("serves static index for root path", async () => {
