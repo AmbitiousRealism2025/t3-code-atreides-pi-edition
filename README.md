@@ -1,6 +1,8 @@
-# T3 Code
+# T3 Code Atreides Pi Edition
 
-T3 Code is a minimal web GUI for coding agents. Currently Codex-first, with Claude Code support coming soon.
+> Fork note: this repository is the Atreides custom implementation of T3 Code, focused on Pi as a first-class provider and the Atreides Prime workflow. Upstream remains valuable as a source reference, but active product development now happens here.
+
+T3 Code is a minimal web GUI for coding agents. This Atreides edition adds Pi integration, Atreides-specific UX work, and related platform experiments.
 
 ## How to use
 
