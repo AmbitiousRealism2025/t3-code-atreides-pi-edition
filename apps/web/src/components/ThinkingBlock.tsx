@@ -29,7 +29,7 @@ export default function ThinkingBlock({
         </span>
       </button>
       {expanded && (
-        <div className="border-border/70 border-t px-3 py-3">
+        <div className="border-border/70 border-t border-l-2 border-l-primary/30 px-3 py-3">
           <pre className="wrap-break-word whitespace-pre-wrap font-mono text-xs leading-relaxed text-muted-foreground/85">
             {thinkingText}
           </pre>

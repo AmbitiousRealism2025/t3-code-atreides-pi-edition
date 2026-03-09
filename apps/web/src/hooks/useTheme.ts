@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useSyncExternalStore } from "react";
 
-export type Theme = "light" | "dark" | "system";
+export type Theme = "system" | "caladan-night" | "atreides-dawn" | "imperial-ember";
 export type ResolvedTheme = "light" | "dark";
 type ThemeSnapshot = {
   theme: Theme;
@@ -34,12 +34,47 @@ function getSystemDark(): boolean {
 
 function getStored(): Theme {
   if (typeof window === "undefined") {
-    return "system";
+    return "caladan-night";
   }
 
   const raw = window.localStorage.getItem(STORAGE_KEY);
-  if (raw === "light" || raw === "dark" || raw === "system") return raw;
-  return "system";
+
+  // Migrate legacy stored values from stock T3 Code
+  if (raw === "light") {
+    window.localStorage.setItem(STORAGE_KEY, "atreides-dawn");
+    return "atreides-dawn";
+  }
+  if (raw === "dark") {
+    window.localStorage.setItem(STORAGE_KEY, "caladan-night");
+    return "caladan-night";
+  }
+
+  if (
+    raw === "caladan-night" ||
+    raw === "atreides-dawn" ||
+    raw === "imperial-ember" ||
+    raw === "system"
+  ) {
+    return raw;
+  }
+
+  return "caladan-night";
+}
+
+const ATREIDES_THEME_CLASSES = ["caladan-night", "atreides-dawn", "imperial-ember"] as const;
+
+function resolveAtreidesClass(theme: Theme, systemDark: boolean): string | null {
+  if (theme === "caladan-night" || theme === "atreides-dawn" || theme === "imperial-ember") {
+    return theme;
+  }
+  if (theme === "system") {
+    return systemDark ? "caladan-night" : "atreides-dawn";
+  }
+  // Legacy "light" / "dark" values handled by migration in getStored,
+  // but as a safety fallback:
+  if (theme === "dark") return "caladan-night";
+  if (theme === "light") return "atreides-dawn";
+  return "caladan-night";
 }
 
 function applyTheme(theme: Theme, suppressTransitions = false) {
@@ -50,8 +85,22 @@ function applyTheme(theme: Theme, suppressTransitions = false) {
   if (suppressTransitions) {
     document.documentElement.classList.add("no-transitions");
   }
+
+  // Remove all Atreides theme classes before applying
+  for (const cls of ATREIDES_THEME_CLASSES) {
+    document.documentElement.classList.remove(cls);
+  }
+
+  // All Atreides themes are dark
   const isDark = resolveTheme(theme, getSystemDark()) === "dark";
   document.documentElement.classList.toggle("dark", isDark);
+
+  // Apply the specific Atreides theme class
+  const atreidesClass = resolveAtreidesClass(theme, getSystemDark());
+  if (atreidesClass) {
+    document.documentElement.classList.add(atreidesClass);
+  }
+
   if (suppressTransitions) {
     // Force a reflow so the no-transitions class takes effect before removal
     // oxlint-disable-next-line no-unused-expressions
@@ -63,11 +112,17 @@ function applyTheme(theme: Theme, suppressTransitions = false) {
 }
 
 export function resolveTheme(theme: Theme, systemDark: boolean): ResolvedTheme {
-  if (theme === "system") {
-    return systemDark ? "dark" : "light";
+  // All three Atreides themes are dark themes
+  if (theme === "caladan-night" || theme === "atreides-dawn" || theme === "imperial-ember") {
+    return "dark";
   }
-
-  return theme;
+  if (theme === "system") {
+    // System maps to Atreides themes, which are all dark
+    return "dark";
+  }
+  // Legacy fallback for "light" / "dark" (pre-migration)
+  if (theme === "light") return "light";
+  return "dark";
 }
 
 // Apply immediately on module load to prevent flash
@@ -122,7 +177,7 @@ function subscribe(listener: () => void): () => void {
 
 export function useTheme() {
   const snapshot = useSyncExternalStore(subscribe, getSnapshot, () => ({
-    theme: "system" as const,
+    theme: "caladan-night" as const,
     systemDark: false,
   }));
   const theme = snapshot.theme;
