@@ -21,7 +21,10 @@ function ChatIndexRouteView() {
         </div>
       )}
 
-      <div className="flex flex-1 items-center justify-center">
+      <div className="relative flex flex-1 items-center justify-center overflow-hidden">
+        <span className="pointer-events-none absolute select-none text-[clamp(4rem,12vw,10rem)] font-black uppercase tracking-[0.15em] text-primary/[0.03]">
+          ATREIDES
+        </span>
         <div className="text-center">
           <p className="text-sm">Select a thread or create a new one to get started.</p>
         </div>

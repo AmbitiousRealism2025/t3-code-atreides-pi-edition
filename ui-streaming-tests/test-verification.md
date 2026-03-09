@@ -2,7 +2,7 @@
 
 ## Folder Inspection: `ui-streaming-tests/`
 
-**Existing files found: 8**
+**Existing files found: 9**
 
 | Filename | Size |
 |---|---|
@@ -14,8 +14,9 @@
 | `bridge-test3.md` | 6,631 bytes |
 | `bridge-test4.md` | 6,667 bytes |
 | `bridge-test5.md` | 6,640 bytes |
+| `test-verification.md` | 1,015 bytes |
 
-Files fall into two groups: three `streamtest` variants (the earlier test series) and five `bridge-test` variants (a newer series, all created on 2026-03-08).
+Files fall into two groups: three `streamtest` variants (the earlier test series) and five `bridge-test` variants (a newer series, all created on 2026-03-08), plus this verification file.
 
 ## Git Status
 
@@ -25,10 +26,10 @@ Files fall into two groups: three `streamtest` variants (the earlier test series
 
 ## Confirmation
 
-Created `test-verification.md` inside `ui-streaming-tests/` at:
+Updated `test-verification.md` inside `ui-streaming-tests/` at:
 
 ```
 /Users/ambrealismwork/Desktop/coding-projects/t3code/ui-streaming-tests/test-verification.md
 ```
 
-This is the 9th file in the folder. The repo was on branch `main` with a clean working tree at the time of creation.
+This is the 9th file in the folder. The repo is on branch `main` with a clean working tree.

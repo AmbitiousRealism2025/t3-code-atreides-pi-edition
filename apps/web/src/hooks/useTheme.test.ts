@@ -3,13 +3,14 @@ import { describe, expect, it } from "vitest";
 import { resolveTheme } from "./useTheme";
 
 describe("resolveTheme", () => {
-  it("preserves explicit light and dark preferences", () => {
-    expect(resolveTheme("light", true)).toBe("light");
-    expect(resolveTheme("dark", false)).toBe("dark");
+  it("all Atreides themes resolve to dark", () => {
+    expect(resolveTheme("caladan-night", false)).toBe("dark");
+    expect(resolveTheme("atreides-dawn", false)).toBe("dark");
+    expect(resolveTheme("imperial-ember", false)).toBe("dark");
   });
 
-  it("maps system theme to the current OS preference", () => {
-    expect(resolveTheme("system", false)).toBe("light");
+  it("system theme always resolves to dark (all Atreides themes are dark)", () => {
+    expect(resolveTheme("system", false)).toBe("dark");
     expect(resolveTheme("system", true)).toBe("dark");
   });
 });
