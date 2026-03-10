@@ -37,10 +37,13 @@ import { resolveAttachmentPath } from "../../attachmentStore.ts";
 import { ServerConfig } from "../../config.ts";
 import { type EventNdjsonLogger, makeEventNdjsonLogger } from "./EventNdjsonLogger.ts";
 import { createPiRuntimeEnv } from "./piRuntimeState.ts";
+import { checkProviderVersion, type ProviderVersionResult } from "./providerVersionCheck.ts";
 
 const PROVIDER = "pi" as const;
 const DEFAULT_PI_BINARY_PATH = "/opt/homebrew/bin/pi";
 const PROCESS_KILL_TIMEOUT_MS = 500;
+/** Minimum Pi CLI version known to work with this adapter's RPC protocol. */
+const PI_MINIMUM_VERSION = [0, 56, 0] as const;
 export const PI_ACTIVITY_BRIDGE_EXTENSION_PATH = path.resolve(
   import.meta.dirname,
   "atreides-t3-bridge.ts",
@@ -394,6 +397,25 @@ const makePiAdapter = (options?: PiAdapterLiveOptions) =>
     yield* Effect.sync(() => {
       ensureDirectory(agentDir);
       ensureDirectory(sessionsDir);
+    });
+
+    // Check Pi CLI version at adapter init. Warn but don't block.
+    let piVersionResult: ProviderVersionResult | undefined;
+    yield* Effect.tryPromise({
+      try: async () => {
+        piVersionResult = await checkProviderVersion({
+          provider: "Pi",
+          binaryPath,
+          minimumVersion: PI_MINIMUM_VERSION,
+        });
+        if (!piVersionResult.satisfiesMinimum) {
+          console.warn(`[PiAdapter] ${piVersionResult.message}`);
+        }
+      },
+      catch: () => {
+        // Version check is best-effort. Don't block adapter init.
+        console.warn("[PiAdapter] Version check failed. Proceeding without version validation.");
+      },
     });
 
     const sessionByThreadId = new Map<ThreadId, PiSessionState>();
@@ -884,6 +906,18 @@ const makePiAdapter = (options?: PiAdapterLiveOptions) =>
             },
           },
         });
+
+        // Surface version warning to the user on session start
+        if (piVersionResult && !piVersionResult.satisfiesMinimum) {
+          emitRuntimeEvent({
+            type: "runtime.warning",
+            ...runtimeEventBase({ threadId: input.threadId }),
+            payload: {
+              message: piVersionResult.message,
+            },
+          });
+        }
+
         emitSessionStateChanged(next, "ready");
 
         return toSession(next);
