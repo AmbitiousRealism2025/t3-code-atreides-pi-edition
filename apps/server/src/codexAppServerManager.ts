@@ -432,8 +432,10 @@ function buildCodexCollaborationMode(input: {
     return undefined;
   }
   const model = normalizeCodexModelSlug(input.model) ?? "gpt-5.3-codex";
+  // Codex CLI ≥0.0.10 renamed "default" → "pairprogramming"
+  const resolvedMode = input.interactionMode === "default" ? "pairprogramming" : input.interactionMode;
   return {
-    mode: input.interactionMode,
+    mode: resolvedMode,
     settings: {
       model,
       reasoning_effort: input.effort ?? "medium",
