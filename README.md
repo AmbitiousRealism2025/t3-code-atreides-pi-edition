@@ -45,6 +45,8 @@ Download the latest release from the [Releases page](https://github.com/Ambitiou
 >
 > - [Pi](https://github.com/mariozechner/pi) — for Pi provider sessions
 > - [Codex CLI](https://github.com/openai/codex) — for Codex provider sessions
+>
+> **Make sure your provider CLIs are up to date.** Older versions of the Codex CLI in particular may use a protocol that this build does not support. Run `codex --version` and update if needed.
 
 ### Build From Source
 
