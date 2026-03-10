@@ -25,8 +25,10 @@ export interface PiModelListResponse {
 // Derive the backend HTTP base URL from VITE_WS_URL (ws://host:port -> http://host:port).
 // Falls back to same-origin for production where the page is served by the backend.
 function getPiApiBase(): string {
-  const wsUrl = import.meta.env.VITE_WS_URL as string | undefined;
-  if (wsUrl && wsUrl.length > 0) {
+  const bridgeUrl = window.desktopBridge?.getWsUrl();
+  const envUrl = import.meta.env.VITE_WS_URL as string | undefined;
+  const wsUrl = bridgeUrl ?? (envUrl && envUrl.length > 0 ? envUrl : null);
+  if (wsUrl) {
     return wsUrl.replace(/^ws:\/\//, "http://").replace(/^wss:\/\//, "https://").replace(/\/+$/, "");
   }
   return "";
