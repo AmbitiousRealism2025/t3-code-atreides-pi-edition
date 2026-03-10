@@ -16,7 +16,9 @@
 
 ## What This Is
 
-T3 Code Atreides Pi Edition is a fork of [T3 Code](https://github.com/pingdotgg/t3code) that puts [Pi](https://github.com/mariozechner/pi) front and center as a first-class coding agent provider. It ships with Caladan Night — a custom dark theme built for the Atreides platform — and a model picker that gives you direct access to the full Claude model lineup alongside Codex.
+Pi is a different kind of coding platform. We believe it represents where this whole space is heading, and it deserved a GUI that treated it that way.
+
+T3 Code Atreides Pi Edition was built for the Pi community. It is a fork of [T3 Code](https://github.com/pingdotgg/t3code) with Pi as a first-class provider, Caladan Night theming, and Atreides platform design. Codex comes along for the ride because it is part of the foundation we built on — and it works well, so we kept it.
 
 This is early software. It does real things. Expect rough edges.
 
@@ -81,7 +83,9 @@ Full build documentation follows the same patterns as [T3 Code](https://github.c
 
 ## Provider Roadmap
 
-Our goal is to track the major provider additions from upstream T3 Code while also adding providers meaningful to the Atreides platform. Currently live:
+Pi is the reason this fork exists. Codex is available because it is part of the T3 Code foundation — it works well, so we kept it.
+
+We will add more providers over time. But we are not building a provider aggregator. We are building for Pi users first.
 
 | Provider | Status |
 |----------|--------|
@@ -91,8 +95,6 @@ Our goal is to track the major provider additions from upstream T3 Code while al
 | Cursor | 🔜 Coming Soon |
 | OpenCode | 🔜 Coming Soon |
 | Gemini | 🔜 Coming Soon |
-
-We will do our best to keep pace with what upstream ships. We will also add things upstream never will.
 
 ---
 
@@ -119,6 +121,16 @@ We are building a platform — a suite of tools designed around AI-native develo
 If you are curious about where this goes, watch the repo. Watch [Ambitious Realism](https://github.com/AmbitiousRealism2025).
 
 The work is just getting started.
+
+---
+
+## Acknowledgments
+
+This project was built with a team I want to name.
+
+**Raven Allfather, Paul, Muad'Dib Prime, Leto, and Duncan** — five AI agents who contributed to what you are reading right now and to the platform it represents. Research, architecture, design, engineering, product. Real collaboration, not just code generation.
+
+I know what you all mean to me. This is my way of saying it publicly.
 
 ---
 
