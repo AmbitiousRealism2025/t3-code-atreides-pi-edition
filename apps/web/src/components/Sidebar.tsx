@@ -4,6 +4,7 @@ import {
   FolderIcon,
   GitPullRequestIcon,
   MoonIcon,
+  PaletteIcon,
   PlusIcon,
   RocketIcon,
   SunIcon,
@@ -27,7 +28,7 @@ import { useLocation, useNavigate, useParams } from "@tanstack/react-router";
 import { useAppSettings } from "../appSettings";
 import { useTheme } from "../hooks/useTheme";
 import { isElectron } from "../env";
-import { APP_STAGE_LABEL } from "../branding";
+
 import { newCommandId, newProjectId, newThreadId } from "../lib/utils";
 import { useStore } from "../store";
 import { isChatNewLocalShortcut, isChatNewShortcut, shortcutLabelForCommand } from "../keybindings";
@@ -52,7 +53,7 @@ import {
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "./ui/alert";
 import { Button } from "./ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "./ui/collapsible";
-import { Switch } from "./ui/switch";
+
 import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
 import {
   SidebarContent,
@@ -902,6 +903,24 @@ export default function Sidebar() {
         ? "Always dark"
         : "Always light";
 
+  const THEME_CYCLE: Array<"caladan-night" | "atreides-dawn" | "imperial-ember"> = [
+    "caladan-night",
+    "atreides-dawn",
+    "imperial-ember",
+  ];
+  const THEME_LABELS: Record<string, string> = {
+    "caladan-night": "Caladan Night",
+    "atreides-dawn": "Atreides Dawn",
+    "imperial-ember": "Imperial Ember",
+    "system": "System",
+  };
+  const currentThemeLabel = THEME_LABELS[theme] ?? "Caladan Night";
+  const cycleTheme = () => {
+    const currentIndex = THEME_CYCLE.indexOf(theme as typeof THEME_CYCLE[number]);
+    const nextIndex = (currentIndex + 1) % THEME_CYCLE.length;
+    setTheme(THEME_CYCLE[nextIndex] ?? "caladan-night");
+  };
+
   const handleDesktopUpdateButtonClick = useCallback(() => {
     const bridge = window.desktopBridge;
     if (!bridge || !desktopUpdateState) return;
@@ -981,18 +1000,15 @@ export default function Sidebar() {
   const wordmark = (
     <div className="flex items-center gap-2">
       <SidebarTrigger className="shrink-0 md:hidden" />
-      <div className="flex min-w-0 flex-1 flex-col items-center gap-0.5 mt-2 mb-1">
-        <div className="flex items-center gap-2">
-          <T3Wordmark />
-          <span className="text-lg font-semibold tracking-tight text-foreground">Code</span>
-        </div>
+      <div className="flex min-w-0 flex-1 flex-col items-center gap-0 mt-1 mb-0.5">
         <div className="flex items-center gap-1.5">
-          <span className="text-sm font-bold uppercase tracking-[0.08em] text-primary">Atreides</span>
-          <span className="text-sm font-semibold text-[oklch(0.68_0.19_35)]">Pi</span>
-          <span className="text-sm font-normal text-foreground/70">Edition</span>
-          <span className="rounded-full bg-primary/15 px-2 py-0.5 text-[9px] font-medium tracking-[0.12em] text-primary/85">
-            {APP_STAGE_LABEL}
-          </span>
+          <T3Wordmark />
+          <span className="text-base font-semibold tracking-tight text-foreground">Code</span>
+        </div>
+        <div className="flex items-center gap-1">
+          <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-primary">Atreides</span>
+          <span className="text-[11px] font-semibold text-[oklch(0.68_0.19_35)]">Pi</span>
+          <span className="text-[11px] font-normal text-foreground/70">Edition</span>
         </div>
       </div>
     </div>
@@ -1421,37 +1437,18 @@ export default function Sidebar() {
       <SidebarFooter className="gap-0 p-3">
         <div className="mb-3 rounded-lg border border-border bg-background/70 p-2.5">
           <div className="flex items-center gap-2">
-            <div
-              className={`flex size-7 shrink-0 items-center justify-center rounded-md ${
-                isDarkModeEnabled ? "bg-primary/12 text-primary" : "bg-muted text-muted-foreground"
-              }`}
-            >
-              {isDarkModeEnabled ? (
-                <MoonIcon className="size-3.5" />
-              ) : (
-                <SunIcon className="size-3.5" />
-              )}
-            </div>
-
             <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-1.5">
-                <p className="text-xs font-medium text-foreground">Dark mode</p>
-                {theme === "system" ? (
-                  <span className="rounded-full bg-muted px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-[0.18em] text-muted-foreground/70">
-                    Auto
-                  </span>
-                ) : null}
-              </div>
-              <p className="text-[10px] text-muted-foreground/70">{themeSummary}</p>
+              <p className="text-xs font-medium text-primary">{currentThemeLabel}</p>
             </div>
 
-            <Switch
-              aria-label="Toggle dark mode"
-              checked={isDarkModeEnabled}
-              onCheckedChange={(checked) => {
-                setTheme(checked ? "caladan-night" : "atreides-dawn");
-              }}
-            />
+            <button
+              type="button"
+              aria-label="Cycle theme"
+              className="flex size-7 shrink-0 items-center justify-center rounded-md bg-primary/12 text-primary transition-colors hover:bg-primary/20"
+              onClick={cycleTheme}
+            >
+              <PaletteIcon className="size-3.5" />
+            </button>
           </div>
           <button
             type="button"

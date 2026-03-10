@@ -5561,7 +5561,7 @@ const MessagesTimeline = memo(function MessagesTimeline({
           className="pointer-events-none select-none text-[clamp(5rem,16vw,14rem)] font-black uppercase tracking-[0.15em] text-transparent animate-[atreides-breathe_6s_ease-in-out_infinite]"
           style={{
             WebkitTextStroke: '2px var(--primary)',
-            opacity: 0.03,
+            opacity: 0.06,
             filter: 'drop-shadow(0 0 18px var(--primary)) drop-shadow(0 0 40px var(--primary))',
           }}
         >
@@ -5574,7 +5574,7 @@ const MessagesTimeline = memo(function MessagesTimeline({
           className="pointer-events-none select-none text-[clamp(3rem,10vw,8rem)] font-black uppercase tracking-[0.15em] text-transparent animate-[atreides-breathe_6s_ease-in-out_infinite_1s]"
           style={{
             WebkitTextStroke: '1.5px var(--primary)',
-            opacity: 0.03,
+            opacity: 0.06,
             filter: 'drop-shadow(0 0 18px var(--primary)) drop-shadow(0 0 40px var(--primary))',
           }}
         >

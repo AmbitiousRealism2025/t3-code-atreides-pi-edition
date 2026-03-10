@@ -247,8 +247,8 @@ body::after {
 }
 
 @keyframes atreides-breathe {
-  0%, 100% { opacity: 0.03; }
-  50% { opacity: 0.055; }
+  0%, 100% { opacity: 0.06; }
+  50% { opacity: 0.10; }
 }
 
 pre,
