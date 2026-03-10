@@ -73,11 +73,38 @@ Full build documentation follows the same patterns as [T3 Code](https://github.c
 
 **Pi as a first-class provider.** Pi is not an afterthought here. It is the primary reason this fork exists. Select Pi from the provider picker, point it at your project, and run Pi coding sessions directly inside the GUI.
 
-**Caladan Night theme.** A custom dark theme built for the Atreides platform. Teal, deep navy, high contrast. Built to be looked at for hours.
+**Three Atreides themes.** We shipped with a full theme suite built for the platform:
+- **Caladan Night** — deep navy, storm-blue accent. Calm authority.
+- **Atreides Dawn** — warm gold on a dark base. Desert sunrise.
+- **Imperial Ember** — deep orange, restrained intensity.
 
 **Full Claude model access.** The model picker gives you direct access to the full Claude lineup — Haiku, Sonnet, Opus — across current and versioned releases.
 
 **Codex support.** Codex is live. Everything that works in upstream T3 Code works here.
+
+---
+
+## Screenshots
+
+**Caladan Night**
+
+![Caladan Night](./docs/screenshots/caladan-night.png)
+
+**Atreides Dawn**
+
+![Atreides Dawn](./docs/screenshots/atreides-dawn.png)
+
+**Provider & Model Picker**
+
+![Provider and Model Picker](./docs/screenshots/provider-model-picker.png)
+
+**Theme Picker**
+
+![Theme Picker](./docs/screenshots/theme-picker.png)
+
+**About**
+
+![About](./docs/screenshots/about.png)
 
 ---
 
