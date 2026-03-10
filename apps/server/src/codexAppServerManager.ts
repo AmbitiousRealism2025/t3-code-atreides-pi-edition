@@ -789,9 +789,8 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
       normalizeCodexModelSlug(input.model ?? context.session.model),
       context.account,
     );
-    if (normalizedModel) {
-      turnStartParams.model = normalizedModel;
-    }
+    // Codex app-server requires a model in every turn/start request
+    turnStartParams.model = normalizedModel ?? CODEX_DEFAULT_MODEL;
     if (input.serviceTier !== undefined) {
       turnStartParams.serviceTier = input.serviceTier;
     }
