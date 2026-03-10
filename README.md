@@ -18,7 +18,7 @@
 
 Pi is a different kind of coding platform. We believe it represents where this whole space is heading, and it deserved a GUI that treated it that way.
 
-T3 Code Atreides Pi Edition was built for the Pi community. It is a fork of [T3 Code](https://github.com/pingdotgg/t3code) with Pi as a first-class provider, Caladan Night theming, and Atreides platform design. Codex comes along for the ride because it is part of the foundation we built on — and it works well, so we kept it.
+T3 Code Atreides Pi Edition was built for the Pi community. It is a fork of [T3 Code](https://github.com/pingdotgg/t3code) with Pi as a first-class provider, Caladan Night theming, and Atreides platform design. Codex comes along for the ride because it is part of the foundation we built on — and it works well, so we kept it. Claude Code, OpenCode, and Cursor are great platforms too, and we will be adding them. But we believe Pi is the way.
 
 This is early software. It does real things. Expect rough edges.
 
