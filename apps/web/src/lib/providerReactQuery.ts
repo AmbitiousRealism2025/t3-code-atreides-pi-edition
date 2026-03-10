@@ -29,7 +29,12 @@ function getPiApiBase(): string {
   const envUrl = import.meta.env.VITE_WS_URL as string | undefined;
   const wsUrl = bridgeUrl ?? (envUrl && envUrl.length > 0 ? envUrl : null);
   if (wsUrl) {
-    return wsUrl.replace(/^ws:\/\//, "http://").replace(/^wss:\/\//, "https://").replace(/\/+$/, "");
+    const httpUrl = wsUrl.replace(/^ws:\/\//, "http://").replace(/^wss:\/\//, "https://");
+    try {
+      return new URL(httpUrl).origin;
+    } catch {
+      return httpUrl.replace(/\/+$/, "");
+    }
   }
   return "";
 }
