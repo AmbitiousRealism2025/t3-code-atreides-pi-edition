@@ -1,16 +1,16 @@
 export const BRAND_ASSET_PATHS = {
-  productionMacIconPng: "assets/prod/black-macos-1024.png",
-  productionLinuxIconPng: "assets/prod/black-universal-1024.png",
-  productionWindowsIconIco: "assets/prod/t3-black-windows.ico",
-  productionWebFaviconIco: "assets/prod/t3-black-web-favicon.ico",
-  productionWebFavicon16Png: "assets/prod/t3-black-web-favicon-16x16.png",
-  productionWebFavicon32Png: "assets/prod/t3-black-web-favicon-32x32.png",
-  productionWebAppleTouchIconPng: "assets/prod/t3-black-web-apple-touch-180.png",
-  developmentWindowsIconIco: "assets/dev/blueprint-windows.ico",
-  developmentWebFaviconIco: "assets/dev/blueprint-web-favicon.ico",
-  developmentWebFavicon16Png: "assets/dev/blueprint-web-favicon-16x16.png",
-  developmentWebFavicon32Png: "assets/dev/blueprint-web-favicon-32x32.png",
-  developmentWebAppleTouchIconPng: "assets/dev/blueprint-web-apple-touch-180.png",
+  productionMacIconPng: "assets/prod/atreides-macos-1024.png",
+  productionLinuxIconPng: "assets/prod/atreides-universal-1024.png",
+  productionWindowsIconIco: "assets/prod/atreides-windows.ico",
+  productionWebFaviconIco: "assets/prod/atreides-web-favicon.ico",
+  productionWebFavicon16Png: "assets/prod/atreides-web-favicon-16x16.png",
+  productionWebFavicon32Png: "assets/prod/atreides-web-favicon-32x32.png",
+  productionWebAppleTouchIconPng: "assets/prod/atreides-web-apple-touch-180.png",
+  developmentWindowsIconIco: "assets/dev/atreides-dev-windows.ico",
+  developmentWebFaviconIco: "assets/dev/atreides-dev-web-favicon.ico",
+  developmentWebFavicon16Png: "assets/dev/atreides-dev-web-favicon-16x16.png",
+  developmentWebFavicon32Png: "assets/dev/atreides-dev-web-favicon-32x32.png",
+  developmentWebAppleTouchIconPng: "assets/dev/atreides-dev-web-apple-touch-180.png",
 } as const;
 
 export interface IconOverride {
