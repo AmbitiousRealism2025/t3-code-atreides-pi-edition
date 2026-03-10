@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="./assets/prod/black-macos-1024.png" alt="T3 Code Atreides Pi Edition" width="120" />
+<img src="./assets/prod/atreides-macos-1024.png" alt="T3 Code Atreides Pi Edition" width="120" />
 
 # T3 Code — Atreides Pi Edition
 
@@ -96,13 +96,15 @@ We will do our best to keep pace with what upstream ships. We will also add thin
 
 ---
 
-## A Note on Contributions
+## Contributing
 
-We are not actively seeking contributions right now.
+Fork this. Build on it. Do what we did — take something solid and make it yours. That is exactly the kind of thing we want to see happen.
 
-This is early. Direction is still forming. If you open an issue or PR anyway, do it knowing there is a real chance it gets closed or deferred without much explanation. That is not a slight — it is just where we are.
+As for contributing directly to this repo: we are not actively seeking contributions right now. The next few phases of Atreides are keeping us busy, and we want to be honest about where our bandwidth is.
 
-If you have something small and specific, open an issue first. We will tell you if it makes sense.
+Bug fix issues are welcome. Open one and we will look at it.
+
+Pull requests outside of bug fixes will probably sit for a while. Not because we do not care — because we are heads down on what comes next.
 
 ---
 
