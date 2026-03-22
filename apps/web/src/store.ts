@@ -153,10 +153,9 @@ function toLegacyProvider(providerName: string | null): ProviderKind {
   return "codex";
 }
 
-const MODEL_SLUGS_BY_PROVIDER: Record<ProviderKind, ReadonlySet<string>> = {
-  codex: new Set(getModelOptions("codex").map((option) => option.slug)),
-  pi: new Set(getModelOptions("pi").map((option) => option.slug)),
-};
+// Registry-derived: use BUILT_IN_MODEL_SLUGS_BY_PROVIDER from contracts
+import { BUILT_IN_MODEL_SLUGS_BY_PROVIDER, PROVIDER_ID_LIST } from "@t3tools/contracts";
+const MODEL_SLUGS_BY_PROVIDER = BUILT_IN_MODEL_SLUGS_BY_PROVIDER;
 
 function inferProviderForThreadModel(input: {
   readonly model: string;
@@ -165,7 +164,7 @@ function inferProviderForThreadModel(input: {
   if (isProviderKind(input.sessionProviderName)) {
     return input.sessionProviderName;
   }
-  for (const provider of ["codex", "pi"] as const satisfies ReadonlyArray<ProviderKind>) {
+  for (const provider of PROVIDER_ID_LIST) {
     const normalized = normalizeModelSlug(input.model, provider);
     if (normalized && MODEL_SLUGS_BY_PROVIDER[provider].has(normalized)) {
       return provider;

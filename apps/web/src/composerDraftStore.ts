@@ -4,6 +4,7 @@ import {
   PI_THINKING_LEVEL_OPTIONS,
   REASONING_EFFORT_OPTIONS_BY_PROVIDER,
   ThreadId,
+  isRegisteredProviderId,
   type CodexReasoningEffort,
   type PiThinkingLevel,
   type ProviderKind,
@@ -220,7 +221,8 @@ function shouldRemoveDraft(draft: ComposerThreadDraftState): boolean {
 }
 
 function normalizeProviderKind(value: unknown): ProviderKind | null {
-  return value === "codex" || value === "pi" ? value : null;
+  if (typeof value !== "string") return null;
+  return isRegisteredProviderId(value) ? (value as ProviderKind) : null;
 }
 
 function revokeObjectPreviewUrl(previewUrl: string): void {
