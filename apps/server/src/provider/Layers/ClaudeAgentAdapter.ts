@@ -454,7 +454,7 @@ function makeClaudeAgentAdapter(_options?: ClaudeAgentAdapterLiveOptions) {
         const thinking = typeof input.modelOptions?.claudeAgent?.thinking === "boolean" && supportsClaudeThinkingToggle(input.model)
           ? input.modelOptions.claudeAgent.thinking : undefined;
         const permissionMode = toPermissionMode(providerOptions?.permissionMode) ??
-          (input.runtimeMode === "full-access" ? "bypassPermissions" : undefined);
+          (input.runtimeMode === "full-access" ? "bypassPermissions" : "default");
 
         const settings: Record<string, unknown> = {};
         if (typeof thinking === "boolean") settings.alwaysThinkingEnabled = thinking;
