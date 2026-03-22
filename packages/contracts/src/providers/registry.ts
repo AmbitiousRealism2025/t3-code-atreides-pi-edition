@@ -8,6 +8,7 @@
  */
 import type { ProviderManifest, ProviderModelOption, ProviderCustomModelConfig } from "../providerManifest";
 import { CODEX_MANIFEST } from "./codex";
+import { CLAUDE_MANIFEST } from "./claude";
 import { PI_MANIFEST } from "./pi";
 
 // ── All registered manifests ───────────────────────────────────────
@@ -16,7 +17,7 @@ import { PI_MANIFEST } from "./pi";
  * MANIFESTS: The single array of all provider manifests.
  * To add a new provider: import the manifest, add it here. That's it.
  */
-export const MANIFESTS = [CODEX_MANIFEST, PI_MANIFEST] as const;
+export const MANIFESTS = [CODEX_MANIFEST, CLAUDE_MANIFEST, PI_MANIFEST] as const;
 
 /**
  * PROVIDER_IDS: Union literal type of all registered provider IDs.

@@ -1,5 +1,6 @@
 export type { ProviderManifest, ProviderModelOption, ProviderCustomModelConfig, ProviderCapabilities, ProviderSessionModelSwitchMode, ProviderPickerConfig, ProviderReasoningConfig, ProviderStartOptionField } from "../providerManifest";
 export { CODEX_MANIFEST } from "./codex";
+export { CLAUDE_MANIFEST } from "./claude";
 export { PI_MANIFEST } from "./pi";
 export {
   MANIFESTS,
