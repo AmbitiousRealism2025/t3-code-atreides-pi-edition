@@ -169,7 +169,7 @@ function makeClaudeAgentAdapter(_options?: ClaudeAgentAdapterLiveOptions) {
 
     function runSdkStream(context: ClaudeSessionContext): Effect.Effect<void> {
       return Effect.promise<void>(async () => {
-          try {
+        try {
             for await (const message of context.queryRuntime) {
               if (context.stopped) break;
 
@@ -254,23 +254,22 @@ function makeClaudeAgentAdapter(_options?: ClaudeAgentAdapterLiveOptions) {
                 }));
               }
             }
-          } catch (error) {
-            if (!context.stopped) {
-              await Effect.runPromise(Effect.gen(function* () {
-                const eid = yield* nextEventId();
-                yield* offerRuntimeEvent({
-                  type: "session.state.changed",
-                  eventId: eid,
-                  provider: PROVIDER,
-                  createdAt: nowIso(),
-                  threadId: context.session.threadId,
-                  payload: { state: "error" },
-                  providerRefs: {},
-                });
-              }));
-            }
+        } catch (error) {
+          if (!context.stopped) {
+            await Effect.runPromise(Effect.gen(function* () {
+              const eid = yield* nextEventId();
+              yield* offerRuntimeEvent({
+                type: "session.state.changed",
+                eventId: eid,
+                provider: PROVIDER,
+                createdAt: nowIso(),
+                threadId: context.session.threadId,
+                payload: { state: "error" },
+                providerRefs: {},
+              });
+            }));
           }
-        })();
+        }
       });
     }
 
