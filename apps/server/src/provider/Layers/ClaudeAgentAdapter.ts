@@ -168,8 +168,7 @@ function makeClaudeAgentAdapter(_options?: ClaudeAgentAdapterLiveOptions) {
     // ── Core: run the SDK stream ────────────────────────────────────
 
     function runSdkStream(context: ClaudeSessionContext): Effect.Effect<void> {
-      return Effect.async<void, never>((resume) => {
-        (async () => {
+      return Effect.promise<void>(async () => {
           try {
             for await (const message of context.queryRuntime) {
               if (context.stopped) break;
@@ -271,7 +270,6 @@ function makeClaudeAgentAdapter(_options?: ClaudeAgentAdapterLiveOptions) {
               }));
             }
           }
-          resume(Effect.void);
         })();
       });
     }
