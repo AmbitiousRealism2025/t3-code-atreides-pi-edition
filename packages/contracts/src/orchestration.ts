@@ -1,5 +1,6 @@
 import { Option, Schema, SchemaIssue, Struct } from "effect";
 import { ProviderModelOptions } from "./model";
+import { PROVIDER_ID_LIST } from "./providers/registry";
 import {
   ApprovalRequestId,
   CheckpointRef,
@@ -27,7 +28,7 @@ export const ORCHESTRATION_WS_CHANNELS = {
   domainEvent: "orchestration.domainEvent",
 } as const;
 
-export const ProviderKind = Schema.Literals(["codex", "pi"]);
+export const ProviderKind = Schema.Literals(PROVIDER_ID_LIST);
 export type ProviderKind = typeof ProviderKind.Type;
 export const ProviderApprovalPolicy = Schema.Literals([
   "untrusted",

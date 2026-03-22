@@ -1,5 +1,16 @@
 import { Schema } from "effect";
-import { ProviderKind } from "./orchestration";
+import type { ProviderKind } from "./orchestration";
+import {
+  MODEL_OPTIONS_BY_PROVIDER as REGISTRY_MODEL_OPTIONS,
+  DEFAULT_MODEL_BY_PROVIDER as REGISTRY_DEFAULT_MODEL,
+  MODEL_SLUG_ALIASES_BY_PROVIDER as REGISTRY_ALIASES,
+  REASONING_EFFORT_OPTIONS_BY_PROVIDER as REGISTRY_REASONING_OPTIONS,
+  DEFAULT_REASONING_EFFORT_BY_PROVIDER as REGISTRY_REASONING_DEFAULT,
+} from "./providers/registry";
+
+// ── Provider-specific model option schemas ─────────────────────────
+// These remain as explicit Schema definitions because the Effect Schema
+// pipeline needs compile-time struct shapes for decode/encode.
 
 export const CODEX_REASONING_EFFORT_OPTIONS = ["xhigh", "high", "medium", "low"] as const;
 export type CodexReasoningEffort = (typeof CODEX_REASONING_EFFORT_OPTIONS)[number];
@@ -23,58 +34,29 @@ export const ProviderModelOptions = Schema.Struct({
 });
 export type ProviderModelOptions = typeof ProviderModelOptions.Type;
 
+// ── Model catalog (registry-derived) ───────────────────────────────
+
 type ModelOption = {
   readonly slug: string;
   readonly name: string;
 };
 
-// Keep the model catalog slug-only. Named presets with prompt/flag bundles sit above this layer.
-export const MODEL_OPTIONS_BY_PROVIDER = {
-  codex: [
-    { slug: "gpt-5.4", name: "GPT-5.4" },
-    { slug: "gpt-5.3-codex", name: "GPT-5.3 Codex" },
-    { slug: "gpt-5.3-codex-spark", name: "GPT-5.3 Codex Spark" },
-    { slug: "gpt-5.2-codex", name: "GPT-5.2 Codex" },
-    { slug: "gpt-5.2", name: "GPT-5.2" },
-  ],
-  pi: [
-    { slug: "anthropic/claude-sonnet-4-6", name: "Anthropic Claude Sonnet 4.6" },
-    { slug: "openai-codex/gpt-5.4", name: "GPT-5.4" },
-  ], // fallback only -- runtime list served from GET /api/provider/pi/models
-} as const satisfies Record<ProviderKind, readonly ModelOption[]>;
+// Re-export registry-derived maps under the same names consumers expect.
+// When Claude is added, only the registry manifest changes. These re-exports stay the same.
+export const MODEL_OPTIONS_BY_PROVIDER = REGISTRY_MODEL_OPTIONS as Record<ProviderKind, readonly ModelOption[]>;
 export type ModelOptionsByProvider = typeof MODEL_OPTIONS_BY_PROVIDER;
 
-type BuiltInModelSlug = ModelOptionsByProvider[ProviderKind][number]["slug"];
+type BuiltInModelSlug = string; // Widened from literal union since registry is dynamic
 export type ModelSlug = BuiltInModelSlug | (string & {});
 
-export const DEFAULT_MODEL_BY_PROVIDER = {
-  codex: "gpt-5.4",
-  pi: "anthropic/claude-sonnet-4-6",
-} as const satisfies Record<ProviderKind, ModelSlug>;
+export const DEFAULT_MODEL_BY_PROVIDER = REGISTRY_DEFAULT_MODEL as Record<ProviderKind, ModelSlug>;
 
-export const MODEL_SLUG_ALIASES_BY_PROVIDER = {
-  codex: {
-    "5.4": "gpt-5.4",
-    "5.3": "gpt-5.3-codex",
-    "gpt-5.3": "gpt-5.3-codex",
-    "5.3-spark": "gpt-5.3-codex-spark",
-    "gpt-5.3-spark": "gpt-5.3-codex-spark",
-  },
-  pi: {
-    sonnet: "anthropic/claude-sonnet-4-6",
-    "sonnet-4-6": "anthropic/claude-sonnet-4-6",
-    "claude-sonnet-4-6": "anthropic/claude-sonnet-4-6",
-    "5.4": "openai-codex/gpt-5.4",
-    "gpt-5.4": "openai-codex/gpt-5.4",
-  },
-} as const satisfies Record<ProviderKind, Record<string, ModelSlug>>;
+// Backward compatibility for existing Codex-only call sites.
+export const MODEL_OPTIONS = MODEL_OPTIONS_BY_PROVIDER.codex;
+export const DEFAULT_MODEL = DEFAULT_MODEL_BY_PROVIDER.codex;
 
-export const REASONING_EFFORT_OPTIONS_BY_PROVIDER = {
-  codex: CODEX_REASONING_EFFORT_OPTIONS,
-  pi: [],
-} as const satisfies Record<ProviderKind, readonly CodexReasoningEffort[]>;
+export const MODEL_SLUG_ALIASES_BY_PROVIDER = REGISTRY_ALIASES as Record<ProviderKind, Record<string, ModelSlug>>;
 
-export const DEFAULT_REASONING_EFFORT_BY_PROVIDER = {
-  codex: "high",
-  pi: null,
-} as const satisfies Record<ProviderKind, CodexReasoningEffort | null>;
+export const REASONING_EFFORT_OPTIONS_BY_PROVIDER = REGISTRY_REASONING_OPTIONS as Record<ProviderKind, readonly string[]>;
+
+export const DEFAULT_REASONING_EFFORT_BY_PROVIDER = REGISTRY_REASONING_DEFAULT as Record<ProviderKind, string | null>;
