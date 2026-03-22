@@ -18,7 +18,7 @@
 
 Pi is a different kind of coding platform. We believe it represents where this whole space is heading, and it deserved a GUI that treated it that way.
 
-T3 Code Atreides Pi Edition was built for the Pi community. It is a fork of [T3 Code](https://github.com/pingdotgg/t3code) with Pi as a first-class provider, Caladan Night theming, and Atreides platform design. Codex comes along for the ride because it is part of the foundation we built on — and it works well, so we kept it. Claude Code, OpenCode, and Cursor are great platforms too, and we will be adding them. But we believe Pi is the way.
+T3 Code Atreides Pi Edition was built for the Pi community. It is a fork of [T3 Code](https://github.com/pingdotgg/t3code) with Pi as a first-class provider, Caladan Night theming, and Atreides platform design. Codex comes along for the ride because it is part of the foundation we built on. Claude Agent is live, bringing full Claude Code support with streaming, extended thinking, and thinking effort controls. OpenCode, Cursor, and more are coming. But we believe Pi is the way.
 
 This is early software. It does real things. Expect rough edges.
 
@@ -45,8 +45,11 @@ Download the latest release from the [Releases page](https://github.com/Ambitiou
 >
 > - [Pi](https://github.com/mariozechner/pi) — for Pi provider sessions
 > - [Codex CLI](https://github.com/openai/codex) — for Codex provider sessions
+> - [Claude Code](https://docs.anthropic.com/en/docs/claude-code) — for Claude Agent provider sessions
 >
-> **Make sure your provider CLIs are up to date.** Older versions of the Codex CLI in particular may use a protocol that this build does not support. Run `codex --version` and update if needed.
+> **Each provider requires its own CLI to be installed and authorized on your machine.** T3 Code does not manage credentials. It spawns the local CLI process, so your existing authentication (API keys, OAuth tokens, etc.) is used automatically.
+>
+> **Make sure your provider CLIs are up to date.** Older versions of the Codex CLI in particular may use a protocol that this build does not support. Run `codex --version`, `claude --version`, or `pi --version` to verify.
 
 ### Build From Source
 
@@ -80,7 +83,7 @@ Full build documentation follows the same patterns as [T3 Code](https://github.c
 - **Atreides Dawn** — warm gold on a dark base. Desert sunrise.
 - **Imperial Ember** — deep orange, restrained intensity.
 
-**Full Claude model access.** The model picker gives you direct access to the full Claude lineup — Haiku, Sonnet, Opus — across current and versioned releases.
+**Claude Agent support.** Claude Code is a first-class provider. Select Claude Agent from the provider picker, choose your model (Sonnet 4.6, Opus, Haiku), and run full Claude Code sessions with streaming responses, extended thinking, and thinking effort controls (Low through Max/Ultrathink). Requires the `claude` CLI installed and authenticated on your machine.
 
 **Codex support.** Codex is live. Everything that works in upstream T3 Code works here.
 
@@ -116,14 +119,14 @@ Pi is the reason this fork exists. Codex is available because it is part of the 
 
 We will add more providers over time. But we are not building a provider aggregator. We are building for Pi users first.
 
-| Provider | Status |
-|----------|--------|
-| Pi | ✅ Live |
-| Codex | ✅ Live |
-| Claude Code | 🔜 Coming Soon |
-| Cursor | 🔜 Coming Soon |
-| OpenCode | 🔜 Coming Soon |
-| Gemini | 🔜 Coming Soon |
+| Provider | Status | Requirements |
+|----------|--------|-------------|
+| Pi | ✅ Live | `pi` CLI installed and configured |
+| Codex | ✅ Live | `codex` CLI installed and authenticated |
+| Claude Agent | ✅ Live | `claude` CLI installed and authenticated |
+| Cursor | 🔜 Coming Soon | — |
+| OpenCode | 🔜 Coming Soon | — |
+| Gemini | 🔜 Coming Soon | — |
 
 ---
 
