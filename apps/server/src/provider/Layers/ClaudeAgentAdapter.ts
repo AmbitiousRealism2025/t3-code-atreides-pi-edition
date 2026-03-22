@@ -569,10 +569,11 @@ function makeClaudeAgentAdapter(_options?: ClaudeAgentAdapterLiveOptions) {
           providerRefs: {},
         });
 
-        // Build user message and enqueue
+        // Build user message in correct SDK format and enqueue
         const userMessage: SDKUserMessage = {
-          role: "user",
-          content: input.input ?? "",
+          type: "user",
+          message: { role: "user", content: input.input ?? "" },
+          parent_tool_use_id: null,
         };
         yield* Queue.offer(context.promptQueue, { type: "message", message: userMessage });
 
