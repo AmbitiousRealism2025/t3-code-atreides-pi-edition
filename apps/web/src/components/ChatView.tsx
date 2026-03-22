@@ -1014,6 +1014,44 @@ export default function ChatView({ threadId }: ChatViewProps) {
     activeProposedPlan !== null;
   const activePendingApproval = pendingApprovals[0] ?? null;
   const isComposerApprovalState = activePendingApproval !== null;
+
+  // ── Claude Agent countdown state ────────────────────────────────
+  const CLAUDE_COUNTDOWN_DURATION = 60;
+  const [claudeCountdownRemaining, setClaudeCountdownRemaining] = useState<number>(CLAUDE_COUNTDOWN_DURATION);
+  const claudeCountdownStartRef = useRef<number | null>(null);
+  const claudeCountdownRafRef = useRef<number>();
+  const isClaudeApproval = selectedProvider === "claudeAgent" && isComposerApprovalState;
+
+  useEffect(() => {
+    if (!isClaudeApproval || !activePendingApproval) {
+      claudeCountdownStartRef.current = null;
+      setClaudeCountdownRemaining(CLAUDE_COUNTDOWN_DURATION);
+      if (claudeCountdownRafRef.current) cancelAnimationFrame(claudeCountdownRafRef.current);
+      return;
+    }
+
+    claudeCountdownStartRef.current = Date.now();
+    setClaudeCountdownRemaining(CLAUDE_COUNTDOWN_DURATION);
+
+    const tick = () => {
+      if (!claudeCountdownStartRef.current) return;
+      const elapsed = (Date.now() - claudeCountdownStartRef.current) / 1000;
+      const next = Math.max(0, CLAUDE_COUNTDOWN_DURATION - elapsed);
+      setClaudeCountdownRemaining(next);
+
+      if (next <= 0) {
+        // Auto-approve
+        void onRespondToApproval(activePendingApproval.requestId, "accept");
+        return;
+      }
+      claudeCountdownRafRef.current = requestAnimationFrame(tick);
+    };
+
+    claudeCountdownRafRef.current = requestAnimationFrame(tick);
+    return () => {
+      if (claudeCountdownRafRef.current) cancelAnimationFrame(claudeCountdownRafRef.current);
+    };
+  }, [isClaudeApproval, activePendingApproval?.requestId]);
   const hasComposerHeader =
     isComposerApprovalState ||
     pendingUserInputs.length > 0 ||
@@ -3646,6 +3684,9 @@ export default function ChatView({ threadId }: ChatViewProps) {
                 <ComposerPendingApprovalPanel
                   approval={activePendingApproval}
                   pendingCount={pendingApprovals.length}
+                  provider={selectedProvider}
+                  countdownRemaining={isClaudeApproval ? claudeCountdownRemaining : undefined}
+                  countdownDuration={CLAUDE_COUNTDOWN_DURATION}
                 />
               </div>
             ) : pendingUserInputs.length > 0 ? (
@@ -4398,11 +4439,17 @@ const ProviderHealthBanner = memo(function ProviderHealthBanner({
 interface ComposerPendingApprovalPanelProps {
   approval: PendingApproval;
   pendingCount: number;
+  provider?: ProviderKind;
+  countdownRemaining?: number;
+  countdownDuration?: number;
 }
 
 const ComposerPendingApprovalPanel = memo(function ComposerPendingApprovalPanel({
   approval,
   pendingCount,
+  provider,
+  countdownRemaining,
+  countdownDuration = 60,
 }: ComposerPendingApprovalPanelProps) {
   const approvalSummary =
     approval.requestKind === "command"
@@ -4410,6 +4457,24 @@ const ComposerPendingApprovalPanel = memo(function ComposerPendingApprovalPanel(
       : approval.requestKind === "file-read"
         ? "File-read approval requested"
         : "File-change approval requested";
+
+  const isClaudeCountdown = provider === "claudeAgent" && countdownRemaining !== undefined;
+
+  // Phase calculation for Claude countdown
+  const phase = !isClaudeCountdown ? "calm" as const
+    : countdownRemaining > 20 ? "calm" as const
+    : countdownRemaining > 10 ? "warm" as const
+    : countdownRemaining > 5 ? "urgent" as const
+    : "critical" as const;
+
+  const progressPercent = isClaudeCountdown
+    ? Math.max(0, (countdownRemaining / countdownDuration) * 100)
+    : 100;
+
+  const phaseBarClass =
+    phase === "calm" ? "bg-accent"
+    : phase === "warm" ? "bg-warning"
+    : "bg-destructive";
 
   return (
     <div className="px-4 py-3.5 sm:px-5 sm:py-4">
@@ -4419,7 +4484,31 @@ const ComposerPendingApprovalPanel = memo(function ComposerPendingApprovalPanel(
         {pendingCount > 1 ? (
           <span className="text-xs text-muted-foreground">1/{pendingCount}</span>
         ) : null}
+        {isClaudeCountdown && (
+          <span className={cn(
+            "ml-auto text-xs transition-colors duration-500",
+            phase === "urgent" || phase === "critical" ? "text-destructive" : "text-muted-foreground/60",
+          )}>
+            auto in {Math.ceil(countdownRemaining)}s
+          </span>
+        )}
       </div>
+      {approval.detail && (
+        <div className="mt-1.5 truncate font-mono text-xs text-muted-foreground/70">
+          {approval.detail}
+        </div>
+      )}
+      {isClaudeCountdown && (
+        <div className="mt-2 h-[3px] w-full overflow-hidden rounded-full bg-muted/50">
+          <div
+            className={cn("h-full rounded-full transition-colors duration-500", phaseBarClass)}
+            style={{
+              width: `${progressPercent}%`,
+              transition: "width 100ms linear, background-color 500ms",
+            }}
+          />
+        </div>
+      )}
     </div>
   );
 });
