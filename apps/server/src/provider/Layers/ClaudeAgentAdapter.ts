@@ -98,14 +98,14 @@ function classifyToolItemType(toolName: string): CanonicalItemType {
   }
 }
 
-function classifyRequestType(toolName: string): "command" | "file-read" | "file-change" {
+function classifyRequestType(toolName: string): string {
   switch (toolName) {
     case "Read": case "Glob": case "Grep": case "LS": case "View":
-      return "file-read";
+      return "file_read_approval";
     case "Write": case "Edit": case "MultiEdit": case "NotebookEdit":
-      return "file-change";
+      return "file_change_approval";
     default:
-      return "command";
+      return "command_execution_approval";
   }
 }
 
