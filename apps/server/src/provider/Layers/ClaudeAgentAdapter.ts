@@ -169,105 +169,168 @@ function makeClaudeAgentAdapter(_options?: ClaudeAgentAdapterLiveOptions) {
 
     function runSdkStream(context: ClaudeSessionContext): Effect.Effect<void> {
       return Effect.promise<void>(async () => {
+        // Track the current content item so deltas accumulate correctly
+        let currentItemId: RuntimeItemId | undefined;
+
+        const emit = (event: ProviderRuntimeEvent) =>
+          Effect.runPromise(Queue.offer(runtimeEventQueue, event).pipe(Effect.asVoid));
+
+        const eid = () => Effect.runPromise(nextEventId());
+        const turnId = () => context.turnState?.turnId ?? TurnId.makeUnsafe("unknown");
+
         try {
-            for await (const message of context.queryRuntime) {
-              if (context.stopped) break;
+          for await (const message of context.queryRuntime) {
+            if (context.stopped) break;
 
-              const messageType = (message as Record<string, unknown>).type as string | undefined;
+            const msgType = (message as Record<string, unknown>).type as string | undefined;
 
-              // Text deltas
-              if (messageType === "assistant" && "content" in message) {
-                const text = extractTextFromMessage(message);
-                if (text) {
-                  await Effect.runPromise(Effect.gen(function* () {
-                    const eid = yield* nextEventId();
-                    const itemId = RuntimeItemId.makeUnsafe(crypto.randomUUID());
-                    yield* offerRuntimeEvent({
-                      type: "content.delta",
-                      eventId: eid,
-                      provider: PROVIDER,
-                      createdAt: nowIso(),
-                      threadId: context.session.threadId,
-                      turnId: context.turnState?.turnId ?? TurnId.makeUnsafe("unknown"),
-                      itemId,
-                      payload: { streamKind: "assistant_text" as RuntimeContentStreamKind, delta: text },
-                      providerRefs: {},
-                    });
-                  }));
-                }
-              }
+            // ── stream_event: partial assistant messages (text deltas, thinking, tool use) ──
+            if (msgType === "stream_event") {
+              const streamEvent = (message as { event: { type: string; [k: string]: unknown } }).event;
+              if (!streamEvent) continue;
 
-              // Result message (turn complete)
-              if (messageType === "result") {
-                const result = message as unknown as SDKResultMessage;
-                const status = turnStatusFromResult(result);
-                const text = extractTextFromMessage(message);
+              const evType = streamEvent.type;
 
-                await Effect.runPromise(Effect.gen(function* () {
-                  if (text) {
-                    const eid = yield* nextEventId();
-                    yield* offerRuntimeEvent({
-                      type: "content.delta",
-                      eventId: eid,
-                      provider: PROVIDER,
-                      createdAt: nowIso(),
-                      threadId: context.session.threadId,
-                      turnId: context.turnState?.turnId ?? TurnId.makeUnsafe("unknown"),
-                      itemId: RuntimeItemId.makeUnsafe(crypto.randomUUID()),
-                      payload: { streamKind: "assistant_text" as RuntimeContentStreamKind, delta: text },
-                      providerRefs: {},
-                    });
-                  }
-
-                  // Emit turn completed
-                  if (context.turnState) {
-                    const eid = yield* nextEventId();
-                    yield* offerRuntimeEvent({
-                      type: "turn.completed",
-                      eventId: eid,
-                      provider: PROVIDER,
-                      createdAt: nowIso(),
-                      threadId: context.session.threadId,
-                      turnId: context.turnState.turnId,
-                      payload: { status },
-                      providerRefs: {},
-                    });
-
-                    context.turns.push({
-                      id: context.turnState.turnId,
-                      items: [],
-                    });
-                    context.turnState = undefined;
-                  }
-
-                  // Session back to ready
-                  const readyEid = yield* nextEventId();
-                  yield* offerRuntimeEvent({
-                    type: "session.state.changed",
-                    eventId: readyEid,
+              // content_block_start: new content block beginning
+              if (evType === "content_block_start") {
+                currentItemId = RuntimeItemId.makeUnsafe(crypto.randomUUID());
+                const block = (streamEvent as { content_block?: { type: string } }).content_block;
+                if (block?.type === "thinking") {
+                  await emit({
+                    type: "content.delta",
+                    eventId: await eid(),
                     provider: PROVIDER,
                     createdAt: nowIso(),
                     threadId: context.session.threadId,
-                    payload: { state: "ready" },
+                    turnId: turnId(),
+                    itemId: currentItemId,
+                    payload: { streamKind: "thinking" as RuntimeContentStreamKind, delta: "" },
                     providerRefs: {},
                   });
-                }));
+                }
+              }
+
+              // content_block_delta: actual text or thinking content
+              if (evType === "content_block_delta") {
+                const delta = (streamEvent as { delta?: { type: string; text?: string; thinking?: string } }).delta;
+                if (!delta) continue;
+                const itemId = currentItemId ?? RuntimeItemId.makeUnsafe(crypto.randomUUID());
+
+                if (delta.type === "text_delta" && delta.text) {
+                  await emit({
+                    type: "content.delta",
+                    eventId: await eid(),
+                    provider: PROVIDER,
+                    createdAt: nowIso(),
+                    threadId: context.session.threadId,
+                    turnId: turnId(),
+                    itemId,
+                    payload: { streamKind: "assistant_text" as RuntimeContentStreamKind, delta: delta.text },
+                    providerRefs: {},
+                  });
+                } else if (delta.type === "thinking_delta" && delta.thinking) {
+                  await emit({
+                    type: "content.delta",
+                    eventId: await eid(),
+                    provider: PROVIDER,
+                    createdAt: nowIso(),
+                    threadId: context.session.threadId,
+                    turnId: turnId(),
+                    itemId,
+                    payload: { streamKind: "thinking" as RuntimeContentStreamKind, delta: delta.thinking },
+                    providerRefs: {},
+                  });
+                }
+              }
+
+              // content_block_stop: block done
+              if (evType === "content_block_stop") {
+                currentItemId = undefined;
               }
             }
-        } catch (error) {
-          if (!context.stopped) {
-            await Effect.runPromise(Effect.gen(function* () {
-              const eid = yield* nextEventId();
-              yield* offerRuntimeEvent({
+
+            // ── assistant: complete message (may contain full text if not streaming) ──
+            if (msgType === "assistant") {
+              const text = extractTextFromMessage(message);
+              if (text) {
+                await emit({
+                  type: "content.delta",
+                  eventId: await eid(),
+                  provider: PROVIDER,
+                  createdAt: nowIso(),
+                  threadId: context.session.threadId,
+                  turnId: turnId(),
+                  itemId: RuntimeItemId.makeUnsafe(crypto.randomUUID()),
+                  payload: { streamKind: "assistant_text" as RuntimeContentStreamKind, delta: text },
+                  providerRefs: {},
+                });
+              }
+            }
+
+            // ── result: turn complete ──
+            if (msgType === "result") {
+              const result = message as unknown as SDKResultMessage;
+              const status = turnStatusFromResult(result);
+
+              // Emit any final text from the result
+              if ("result" in result && typeof (result as { result?: string }).result === "string") {
+                const resultText = (result as { result: string }).result;
+                if (resultText) {
+                  await emit({
+                    type: "content.delta",
+                    eventId: await eid(),
+                    provider: PROVIDER,
+                    createdAt: nowIso(),
+                    threadId: context.session.threadId,
+                    turnId: turnId(),
+                    itemId: RuntimeItemId.makeUnsafe(crypto.randomUUID()),
+                    payload: { streamKind: "assistant_text" as RuntimeContentStreamKind, delta: resultText },
+                    providerRefs: {},
+                  });
+                }
+              }
+
+              // Turn completed
+              if (context.turnState) {
+                await emit({
+                  type: "turn.completed",
+                  eventId: await eid(),
+                  provider: PROVIDER,
+                  createdAt: nowIso(),
+                  threadId: context.session.threadId,
+                  turnId: context.turnState.turnId,
+                  payload: { status },
+                  providerRefs: {},
+                });
+
+                context.turns.push({ id: context.turnState.turnId, items: [] });
+                context.turnState = undefined;
+              }
+
+              // Session back to ready
+              await emit({
                 type: "session.state.changed",
-                eventId: eid,
+                eventId: await eid(),
                 provider: PROVIDER,
                 createdAt: nowIso(),
                 threadId: context.session.threadId,
-                payload: { state: "error" },
+                payload: { state: "ready" },
                 providerRefs: {},
               });
-            }));
+            }
+          }
+        } catch (error) {
+          console.error("[ClaudeAgentAdapter] stream error:", error);
+          if (!context.stopped) {
+            await emit({
+              type: "session.state.changed",
+              eventId: await eid(),
+              provider: PROVIDER,
+              createdAt: nowIso(),
+              threadId: context.session.threadId,
+              payload: { state: "error" },
+              providerRefs: {},
+            });
           }
         }
       });
@@ -462,6 +525,19 @@ function makeClaudeAgentAdapter(_options?: ClaudeAgentAdapterLiveOptions) {
           providerRefs: {},
         });
 
+        // Emit turn.started
+        const turnStartEid = yield* nextEventId();
+        yield* offerRuntimeEvent({
+          type: "turn.started",
+          eventId: turnStartEid,
+          provider: PROVIDER,
+          createdAt: nowIso(),
+          threadId: input.threadId,
+          turnId,
+          payload: {},
+          providerRefs: {},
+        });
+
         // Build user message and enqueue
         const userMessage: SDKUserMessage = {
           role: "user",
@@ -508,6 +584,12 @@ function makeClaudeAgentAdapter(_options?: ClaudeAgentAdapterLiveOptions) {
         const context = sessions.get(threadId);
         if (!context) return;
         context.stopped = true;
+        // Abort the SDK query if possible
+        try {
+          if (context.queryRuntime && "abort" in context.queryRuntime && typeof context.queryRuntime.abort === "function") {
+            context.queryRuntime.abort();
+          }
+        } catch (_) { /* best-effort */ }
         yield* Queue.offer(context.promptQueue, { type: "terminate" });
         yield* Queue.shutdown(context.promptQueue);
         sessions.delete(threadId);
