@@ -171,6 +171,9 @@ function makeClaudeAgentAdapter(_options?: ClaudeAgentAdapterLiveOptions) {
       return Effect.promise<void>(async () => {
         // Track the current content item so deltas accumulate correctly
         let currentItemId: RuntimeItemId | undefined;
+        let currentToolName: string | undefined;
+        let currentToolInput: Record<string, unknown> = {};
+        let currentBlockType: string | undefined;
         let receivedStreamDeltas = false;
 
         const emit = (event: ProviderRuntimeEvent) =>
@@ -195,7 +198,11 @@ function makeClaudeAgentAdapter(_options?: ClaudeAgentAdapterLiveOptions) {
               // content_block_start: new content block beginning
               if (evType === "content_block_start") {
                 currentItemId = RuntimeItemId.makeUnsafe(crypto.randomUUID());
-                const block = (streamEvent as { content_block?: { type: string; name?: string; id?: string } }).content_block;
+                const block = (streamEvent as { content_block?: { type: string; name?: string; id?: string; input?: Record<string, unknown> } }).content_block;
+                currentBlockType = block?.type;
+                currentToolName = block?.name;
+                currentToolInput = block?.input ?? {};
+
                 if (block?.type === "thinking") {
                   await emit({
                     type: "content.delta",
@@ -209,9 +216,10 @@ function makeClaudeAgentAdapter(_options?: ClaudeAgentAdapterLiveOptions) {
                     providerRefs: {},
                   });
                 }
-                // Tool use block: emit item.started so the UI shows the step
+                // Tool use block: emit item.started with tool name and detail
                 if (block?.type === "tool_use" && block.name) {
                   const toolItemType = classifyToolItemType(block.name);
+                  const detail = summarizeToolRequest(block.name, block.input ?? {});
                   await emit({
                     type: "item.started",
                     eventId: await eid(),
@@ -223,6 +231,7 @@ function makeClaudeAgentAdapter(_options?: ClaudeAgentAdapterLiveOptions) {
                     payload: {
                       itemType: toolItemType,
                       title: block.name,
+                      detail,
                     },
                     providerRefs: {},
                   } as ProviderRuntimeEvent);
@@ -234,6 +243,11 @@ function makeClaudeAgentAdapter(_options?: ClaudeAgentAdapterLiveOptions) {
                 const delta = (streamEvent as { delta?: { type: string; text?: string; thinking?: string } }).delta;
                 if (!delta) continue;
                 const itemId = currentItemId ?? RuntimeItemId.makeUnsafe(crypto.randomUUID());
+
+                // Accumulate tool input JSON for detail in item.completed
+                if (delta.type === "input_json_delta" && typeof (delta as any).partial_json === "string") {
+                  // Tool input arrives incrementally; we'll get the full input from the assistant message
+                }
 
                 if (delta.type === "text_delta" && delta.text) {
                   receivedStreamDeltas = true;
@@ -265,8 +279,10 @@ function makeClaudeAgentAdapter(_options?: ClaudeAgentAdapterLiveOptions) {
 
               // content_block_stop: block done
               if (evType === "content_block_stop") {
-                // Emit item.completed for tool use blocks
-                if (currentItemId) {
+                // Emit item.completed for tool use blocks with full context
+                if (currentItemId && currentBlockType === "tool_use" && currentToolName) {
+                  const toolItemType = classifyToolItemType(currentToolName);
+                  const detail = summarizeToolRequest(currentToolName, currentToolInput);
                   await emit({
                     type: "item.completed",
                     eventId: await eid(),
@@ -276,13 +292,17 @@ function makeClaudeAgentAdapter(_options?: ClaudeAgentAdapterLiveOptions) {
                     turnId: turnId(),
                     itemId: currentItemId,
                     payload: {
-                      itemType: "mcp_tool_call" as CanonicalItemType,
-                      title: "Tool complete",
+                      itemType: toolItemType,
+                      title: currentToolName,
+                      detail,
                     },
                     providerRefs: {},
                   } as ProviderRuntimeEvent);
                 }
                 currentItemId = undefined;
+                currentBlockType = undefined;
+                currentToolName = undefined;
+                currentToolInput = {};
               }
             }
 
@@ -328,22 +348,46 @@ function makeClaudeAgentAdapter(_options?: ClaudeAgentAdapterLiveOptions) {
               }
             }
 
-            // ── assistant: complete message (skip if we already streamed deltas) ──
+            // ── assistant: complete message ──
             if (msgType === "assistant") {
-              if (!receivedStreamDeltas) {
-                const text = extractTextFromMessage(message);
-                if (text) {
-                  await emit({
-                    type: "content.delta",
-                    eventId: await eid(),
-                    provider: PROVIDER,
-                    createdAt: nowIso(),
-                    threadId: context.session.threadId,
-                    turnId: turnId(),
-                    itemId: RuntimeItemId.makeUnsafe(crypto.randomUUID()),
-                    payload: { streamKind: "assistant_text" as RuntimeContentStreamKind, delta: text },
-                    providerRefs: {},
-                  });
+              const assistantMsg = (message as { message?: { content?: Array<{ type: string; text?: string; name?: string; input?: Record<string, unknown> }> } }).message;
+              const content = assistantMsg?.content;
+
+              if (Array.isArray(content)) {
+                for (const block of content) {
+                  // Emit text if we didn't stream it
+                  if (block.type === "text" && block.text && !receivedStreamDeltas) {
+                    await emit({
+                      type: "content.delta",
+                      eventId: await eid(),
+                      provider: PROVIDER,
+                      createdAt: nowIso(),
+                      threadId: context.session.threadId,
+                      turnId: turnId(),
+                      itemId: RuntimeItemId.makeUnsafe(crypto.randomUUID()),
+                      payload: { streamKind: "assistant_text" as RuntimeContentStreamKind, delta: block.text },
+                      providerRefs: {},
+                    });
+                  }
+
+                  // Emit detailed tool use events from the complete message
+                  if (block.type === "tool_use" && block.name) {
+                    const toolItemType = classifyToolItemType(block.name);
+                    const detail = summarizeToolRequest(block.name, block.input ?? {});
+                    const itemId = RuntimeItemId.makeUnsafe(crypto.randomUUID());
+                    // item.started with full input detail
+                    await emit({
+                      type: "item.started",
+                      eventId: await eid(),
+                      provider: PROVIDER,
+                      createdAt: nowIso(),
+                      threadId: context.session.threadId,
+                      turnId: turnId(),
+                      itemId,
+                      payload: { itemType: toolItemType, title: block.name, detail },
+                      providerRefs: {},
+                    } as ProviderRuntimeEvent);
+                  }
                 }
               }
               // Reset for next turn
