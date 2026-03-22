@@ -1457,7 +1457,7 @@ export default function Sidebar() {
               void navigate({ to: "/settings" });
             }}
           >
-            Open appearance settings
+            Open settings
           </button>
         </div>
 

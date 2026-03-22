@@ -7,7 +7,7 @@ interface ThinkingBlockProps {
 
 export default function ThinkingBlock({
   thinkingText,
-  defaultExpanded = false,
+  defaultExpanded = true,
 }: ThinkingBlockProps) {
   const [expanded, setExpanded] = useState(defaultExpanded);
   const previewLength = Math.max(1, Math.round(thinkingText.length / 100) * 100);
