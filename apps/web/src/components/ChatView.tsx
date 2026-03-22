@@ -798,7 +798,9 @@ export default function ChatView({ threadId }: ChatViewProps) {
     activeThread?.model ?? activeProject?.model ?? getDefaultModel(selectedProvider),
   );
   const customModelsForSelectedProvider =
-    selectedProvider === "pi" ? settings.customPiModels : settings.customCodexModels;
+    selectedProvider === "pi" ? settings.customPiModels
+    : selectedProvider === "claudeAgent" ? (settings.customClaudeModels ?? [])
+    : settings.customCodexModels;
   const selectedModel = useMemo(() => {
     const draftModel = composerDraft.model;
     if (!draftModel) {
@@ -845,6 +847,12 @@ export default function ChatView({ threadId }: ChatViewProps) {
         ...(selectedCodexFastModeEnabled ? { fastMode: true } : {}),
       };
       return Object.keys(codexOptions).length > 0 ? { codex: codexOptions } : undefined;
+    }
+    if (selectedProvider === "claudeAgent") {
+      const claudeOptions = {
+        ...(supportsReasoningEffort && selectedEffort ? { effort: selectedEffort } : {}),
+      };
+      return Object.keys(claudeOptions).length > 0 ? { claudeAgent: claudeOptions } : undefined;
     }
     if (selectedProvider === "pi" && supportsPiThinkingLevel && selectedPiThinkingLevel) {
       return {
@@ -3201,7 +3209,9 @@ export default function ChatView({ threadId }: ChatViewProps) {
         activeThread.id,
         resolveAppModelSelection(
           provider,
-          provider === "pi" ? settings.customPiModels : settings.customCodexModels,
+          provider === "pi" ? settings.customPiModels
+          : provider === "claudeAgent" ? (settings.customClaudeModels ?? [])
+          : settings.customCodexModels,
           model,
         ),
       );
@@ -5624,7 +5634,7 @@ function isAvailableProviderOption(option: (typeof PROVIDER_OPTIONS)[number]): o
   label: string;
   available: true;
 } {
-  return option.available && option.value !== "claudeCode";
+  return option.available;
 }
 
 const AVAILABLE_PROVIDER_OPTIONS = PROVIDER_OPTIONS.filter(isAvailableProviderOption);
@@ -5638,7 +5648,6 @@ const PROVIDER_ICON_BY_PROVIDER: Record<ProviderPickerKind, Icon> = {
   codex: OpenAI,
   claudeAgent: ClaudeAI,
   pi: Sparkles,
-  claudeCode: ClaudeAI,
   cursor: CursorIcon,
 };
 
@@ -5839,7 +5848,7 @@ const ProviderModelPicker = memo(function ProviderModelPicker(props: {
                 aria-hidden="true"
                 className={cn(
                   "size-4 shrink-0 opacity-80",
-                  option.value === "claudeCode" ? "" : "text-muted-foreground/85",
+                  "text-muted-foreground/85",
                 )}
               />
               <span>{option.label}</span>

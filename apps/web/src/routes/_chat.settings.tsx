@@ -53,6 +53,13 @@ const MODEL_PROVIDER_SETTINGS: Array<{
     example: "gpt-6.7-codex-ultra-preview",
   },
   {
+    provider: "claudeAgent",
+    title: "Claude Agent",
+    description: "Save additional Claude model slugs for the picker and `/model` command.",
+    placeholder: "your-claude-model-slug",
+    example: "claude-sonnet-5-0",
+  },
+  {
     provider: "pi",
     title: "Pi",
     description: "Save additional Pi model slugs for the picker and `/model` command.",
@@ -68,6 +75,8 @@ function getCustomModelsForProvider(
   switch (provider) {
     case "codex":
       return settings.customCodexModels;
+    case "claudeAgent":
+      return settings.customClaudeModels ?? [];
     case "pi":
       return settings.customPiModels;
   }
@@ -80,6 +89,8 @@ function getDefaultCustomModelsForProvider(
   switch (provider) {
     case "codex":
       return defaults.customCodexModels;
+    case "claudeAgent":
+      return defaults.customClaudeModels ?? [];
     case "pi":
       return defaults.customPiModels;
   }
@@ -89,6 +100,8 @@ function patchCustomModels(provider: ProviderKind, models: string[]) {
   switch (provider) {
     case "codex":
       return { customCodexModels: models };
+    case "claudeAgent":
+      return { customClaudeModels: models };
     case "pi":
       return { customPiModels: models };
   }
