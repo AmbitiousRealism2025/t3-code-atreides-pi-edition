@@ -602,7 +602,7 @@ export function parseClaudeAuthStatusFromOutput(result: CommandResult): {
 } {
   const output = `${result.stdout}\n${result.stderr}`.toLowerCase();
 
-  if (output.includes("logged in") || output.includes("authenticated")) {
+  if (output.includes("logged in") || output.includes("loggedin") || output.includes("authenticated")) {
     return { status: "ready", authStatus: "authenticated" };
   }
 

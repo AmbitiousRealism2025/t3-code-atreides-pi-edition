@@ -171,6 +171,7 @@ function makeClaudeAgentAdapter(_options?: ClaudeAgentAdapterLiveOptions) {
       return Effect.promise<void>(async () => {
         // Track the current content item so deltas accumulate correctly
         let currentItemId: RuntimeItemId | undefined;
+        let receivedStreamDeltas = false;
 
         const emit = (event: ProviderRuntimeEvent) =>
           Effect.runPromise(Queue.offer(runtimeEventQueue, event).pipe(Effect.asVoid));
@@ -217,6 +218,7 @@ function makeClaudeAgentAdapter(_options?: ClaudeAgentAdapterLiveOptions) {
                 const itemId = currentItemId ?? RuntimeItemId.makeUnsafe(crypto.randomUUID());
 
                 if (delta.type === "text_delta" && delta.text) {
+                  receivedStreamDeltas = true;
                   await emit({
                     type: "content.delta",
                     eventId: await eid(),
@@ -249,22 +251,26 @@ function makeClaudeAgentAdapter(_options?: ClaudeAgentAdapterLiveOptions) {
               }
             }
 
-            // ── assistant: complete message (may contain full text if not streaming) ──
+            // ── assistant: complete message (skip if we already streamed deltas) ──
             if (msgType === "assistant") {
-              const text = extractTextFromMessage(message);
-              if (text) {
-                await emit({
-                  type: "content.delta",
-                  eventId: await eid(),
-                  provider: PROVIDER,
-                  createdAt: nowIso(),
-                  threadId: context.session.threadId,
-                  turnId: turnId(),
-                  itemId: RuntimeItemId.makeUnsafe(crypto.randomUUID()),
-                  payload: { streamKind: "assistant_text" as RuntimeContentStreamKind, delta: text },
-                  providerRefs: {},
-                });
+              if (!receivedStreamDeltas) {
+                const text = extractTextFromMessage(message);
+                if (text) {
+                  await emit({
+                    type: "content.delta",
+                    eventId: await eid(),
+                    provider: PROVIDER,
+                    createdAt: nowIso(),
+                    threadId: context.session.threadId,
+                    turnId: turnId(),
+                    itemId: RuntimeItemId.makeUnsafe(crypto.randomUUID()),
+                    payload: { streamKind: "assistant_text" as RuntimeContentStreamKind, delta: text },
+                    providerRefs: {},
+                  });
+                }
               }
+              // Reset for next turn
+              receivedStreamDeltas = false;
             }
 
             // ── result: turn complete ──
@@ -272,8 +278,8 @@ function makeClaudeAgentAdapter(_options?: ClaudeAgentAdapterLiveOptions) {
               const result = message as unknown as SDKResultMessage;
               const status = turnStatusFromResult(result);
 
-              // Emit any final text from the result
-              if ("result" in result && typeof (result as { result?: string }).result === "string") {
+              // Emit final text from result only if we didn't already stream it
+              if (!receivedStreamDeltas && "result" in result && typeof (result as { result?: string }).result === "string") {
                 const resultText = (result as { result: string }).result;
                 if (resultText) {
                   await emit({
