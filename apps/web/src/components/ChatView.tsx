@@ -886,7 +886,8 @@ export default function ChatView({ threadId }: ChatViewProps) {
       ...piCustomModels,
       ...unconfiguredBase.map(({ slug, name }) => ({ slug, name, isCustom: false, hasCredentials: false })),
     ];
-    return { codex: codexOptions, pi: piOptions };
+    const claudeOptions = getAppModelOptions("claudeAgent", settings.customClaudeModels ?? []);
+    return { codex: codexOptions, claudeAgent: claudeOptions, pi: piOptions };
   }, [settings, piModels, isPiModelsError]);
   const selectedModelForPickerWithCustomFallback = useMemo(() => {
     const currentOptions = modelOptionsByProvider[selectedProvider];
@@ -5635,6 +5636,7 @@ const COMING_SOON_PROVIDER_OPTIONS = [
 
 const PROVIDER_ICON_BY_PROVIDER: Record<ProviderPickerKind, Icon> = {
   codex: OpenAI,
+  claudeAgent: ClaudeAI,
   pi: Sparkles,
   claudeCode: ClaudeAI,
   cursor: CursorIcon,
