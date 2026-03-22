@@ -352,12 +352,43 @@ function makeClaudeAgentAdapter(_options?: ClaudeAgentAdapterLiveOptions) {
         const threadId = input.threadId;
         const sessionId = crypto.randomUUID();
 
+        // Use a simple async generator instead of Effect Stream for SDK compatibility
+        const messageBuffer: SDKUserMessage[] = [];
+        let messageResolve: (() => void) | null = null;
+        let terminated = false;
+
         const promptQueue = yield* Queue.unbounded<PromptQueueItem>();
-        const prompt = Stream.fromQueue(promptQueue).pipe(
-          Stream.filter((item) => item.type === "message"),
-          Stream.map((item) => (item as { type: "message"; message: SDKUserMessage }).message),
-          Stream.toAsyncIterable,
+
+        // Drain the Effect queue into the plain buffer (runs in background)
+        Effect.runFork(
+          Effect.forever(
+            Effect.gen(function* () {
+              const item = yield* Queue.take(promptQueue);
+              if (item.type === "terminate") {
+                terminated = true;
+                if (messageResolve) messageResolve();
+                return yield* Effect.interrupt;
+              }
+              messageBuffer.push((item as { type: "message"; message: SDKUserMessage }).message);
+              if (messageResolve) {
+                messageResolve();
+                messageResolve = null;
+              }
+            }),
+          ),
         );
+
+        async function* promptGenerator(): AsyncGenerator<SDKUserMessage, void> {
+          while (!terminated) {
+            if (messageBuffer.length > 0) {
+              yield messageBuffer.shift()!;
+            } else {
+              await new Promise<void>((resolve) => { messageResolve = resolve; });
+            }
+          }
+        }
+
+        const prompt = promptGenerator();
 
         // canUseTool: handle permission requests
         const pendingApprovals = new Map<ApprovalRequestId, { decision: Deferred.Deferred<ProviderApprovalDecision> }>();
