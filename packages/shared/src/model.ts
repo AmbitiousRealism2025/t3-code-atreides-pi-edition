@@ -1,4 +1,5 @@
 import {
+  BUILT_IN_MODEL_SLUGS_BY_PROVIDER,
   CODEX_REASONING_EFFORT_OPTIONS,
   DEFAULT_MODEL_BY_PROVIDER,
   DEFAULT_REASONING_EFFORT_BY_PROVIDER,
@@ -12,12 +13,7 @@ import {
   type ProviderKind,
 } from "@t3tools/contracts";
 
-type CatalogProvider = keyof typeof MODEL_OPTIONS_BY_PROVIDER;
-
-const MODEL_SLUG_SET_BY_PROVIDER: Record<CatalogProvider, ReadonlySet<ModelSlug>> = {
-  codex: new Set(MODEL_OPTIONS_BY_PROVIDER.codex.map((option) => option.slug)),
-  pi: new Set(MODEL_OPTIONS_BY_PROVIDER.pi.map((option) => option.slug)),
-};
+const MODEL_SLUG_SET_BY_PROVIDER = BUILT_IN_MODEL_SLUGS_BY_PROVIDER;
 // Providers whose models support Pi's --thinking flag.
 // Stage 3 TODO: replace with capability metadata from Pi SDK ModelDefinition.capabilities.reasoning.
 // For now: all Anthropic and OpenAI Codex models support thinking via Pi.
