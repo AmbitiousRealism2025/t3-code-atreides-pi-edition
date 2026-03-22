@@ -195,7 +195,7 @@ function makeClaudeAgentAdapter(_options?: ClaudeAgentAdapterLiveOptions) {
               // content_block_start: new content block beginning
               if (evType === "content_block_start") {
                 currentItemId = RuntimeItemId.makeUnsafe(crypto.randomUUID());
-                const block = (streamEvent as { content_block?: { type: string } }).content_block;
+                const block = (streamEvent as { content_block?: { type: string; name?: string; id?: string } }).content_block;
                 if (block?.type === "thinking") {
                   await emit({
                     type: "content.delta",
@@ -208,6 +208,24 @@ function makeClaudeAgentAdapter(_options?: ClaudeAgentAdapterLiveOptions) {
                     payload: { streamKind: "thinking" as RuntimeContentStreamKind, delta: "" },
                     providerRefs: {},
                   });
+                }
+                // Tool use block: emit item.started so the UI shows the step
+                if (block?.type === "tool_use" && block.name) {
+                  const toolItemType = classifyToolItemType(block.name);
+                  await emit({
+                    type: "item.started",
+                    eventId: await eid(),
+                    provider: PROVIDER,
+                    createdAt: nowIso(),
+                    threadId: context.session.threadId,
+                    turnId: turnId(),
+                    itemId: currentItemId,
+                    payload: {
+                      itemType: toolItemType,
+                      title: block.name,
+                    },
+                    providerRefs: {},
+                  } as ProviderRuntimeEvent);
                 }
               }
 
@@ -247,7 +265,66 @@ function makeClaudeAgentAdapter(_options?: ClaudeAgentAdapterLiveOptions) {
 
               // content_block_stop: block done
               if (evType === "content_block_stop") {
+                // Emit item.completed for tool use blocks
+                if (currentItemId) {
+                  await emit({
+                    type: "item.completed",
+                    eventId: await eid(),
+                    provider: PROVIDER,
+                    createdAt: nowIso(),
+                    threadId: context.session.threadId,
+                    turnId: turnId(),
+                    itemId: currentItemId,
+                    payload: {
+                      itemType: "mcp_tool_call" as CanonicalItemType,
+                      title: "Tool complete",
+                    },
+                    providerRefs: {},
+                  } as ProviderRuntimeEvent);
+                }
                 currentItemId = undefined;
+              }
+            }
+
+            // ── tool_progress: SDK reports tool execution progress ──
+            if (msgType === "tool_progress") {
+              const toolMsg = message as { tool_name?: string; tool_use_id?: string; elapsed_time_seconds?: number };
+              const itemId = RuntimeItemId.makeUnsafe(toolMsg.tool_use_id ?? crypto.randomUUID());
+              const toolItemType = classifyToolItemType(toolMsg.tool_name ?? "");
+              await emit({
+                type: "item.updated",
+                eventId: await eid(),
+                provider: PROVIDER,
+                createdAt: nowIso(),
+                threadId: context.session.threadId,
+                turnId: turnId(),
+                itemId,
+                payload: {
+                  itemType: toolItemType,
+                  title: toolMsg.tool_name ?? "Tool",
+                  detail: `Running for ${Math.round(toolMsg.elapsed_time_seconds ?? 0)}s`,
+                  status: "running",
+                },
+                providerRefs: {},
+              } as ProviderRuntimeEvent);
+            }
+
+            // ── tool_use_summary: tool execution complete ──
+            if (msgType === "tool_use_summary") {
+              const summaryMsg = message as { summary?: string };
+              if (summaryMsg.summary) {
+                const itemId = RuntimeItemId.makeUnsafe(crypto.randomUUID());
+                await emit({
+                  type: "content.delta",
+                  eventId: await eid(),
+                  provider: PROVIDER,
+                  createdAt: nowIso(),
+                  threadId: context.session.threadId,
+                  turnId: turnId(),
+                  itemId,
+                  payload: { streamKind: "assistant_text" as RuntimeContentStreamKind, delta: summaryMsg.summary },
+                  providerRefs: {},
+                });
               }
             }
 
