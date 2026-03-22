@@ -31,6 +31,7 @@ import { createPiRuntimeEnv, getPiModelProbeCandidates } from "./piRuntimeState.
 
 const DEFAULT_TIMEOUT_MS = 4_000;
 const CODEX_PROVIDER = "codex" as const;
+const CLAUDE_AGENT_PROVIDER = "claudeAgent" as const;
 const PI_PROVIDER = "pi" as const;
 const DEFAULT_PI_BINARY_PATH = "/opt/homebrew/bin/pi";
 const DEFAULT_PI_MODEL = DEFAULT_MODEL_BY_PROVIDER.pi;
@@ -590,15 +591,123 @@ export const checkPiProviderStatus: Effect.Effect<
   } satisfies ServerProviderStatus;
 }).pipe(Effect.scoped);
 
+// ── Claude health check ─────────────────────────────────────────────
+
+const runClaudeCommand = (args: ReadonlyArray<string>) => runCommand("claude", args);
+
+export function parseClaudeAuthStatusFromOutput(result: CommandResult): {
+  readonly status: ServerProviderStatusState;
+  readonly authStatus: ServerProviderAuthStatus;
+  readonly message?: string;
+} {
+  const output = `${result.stdout}\n${result.stderr}`.toLowerCase();
+
+  if (output.includes("logged in") || output.includes("authenticated")) {
+    return { status: "ready", authStatus: "authenticated" };
+  }
+
+  if (output.includes("not logged in") || output.includes("not authenticated") || output.includes("unauthenticated")) {
+    return {
+      status: "error",
+      authStatus: "unauthenticated",
+      message: "Claude Agent CLI is not authenticated. Run `claude auth login` and try again.",
+    };
+  }
+
+  return { status: "warning", authStatus: "unknown" };
+}
+
+export const checkClaudeProviderStatus: Effect.Effect<
+  ServerProviderStatus,
+  never,
+  ChildProcessSpawner.ChildProcessSpawner
+> = Effect.gen(function* () {
+  const checkedAt = new Date().toISOString();
+
+  // Probe 1: claude --version
+  const versionProbe = yield* runClaudeCommand(["--version"]).pipe(
+    Effect.timeoutOption(DEFAULT_TIMEOUT_MS),
+    Effect.result,
+  );
+
+  if (Result.isFailure(versionProbe)) {
+    const error = versionProbe.failure;
+    return {
+      provider: CLAUDE_AGENT_PROVIDER,
+      status: "error" as const,
+      available: false,
+      authStatus: "unknown" as const,
+      checkedAt,
+      message: isCommandMissingCause(error)
+        ? "Claude Agent CLI (`claude`) is not installed or not on PATH."
+        : `Failed to execute Claude Agent CLI health check: ${error instanceof Error ? error.message : String(error)}.`,
+    };
+  }
+
+  if (Option.isNone(versionProbe.success)) {
+    return {
+      provider: CLAUDE_AGENT_PROVIDER,
+      status: "error" as const,
+      available: false,
+      authStatus: "unknown" as const,
+      checkedAt,
+      message: "Claude Agent CLI is installed but timed out while running command.",
+    };
+  }
+
+  const version = versionProbe.success.value;
+  if (version.code !== 0) {
+    const detail = detailFromResult(version);
+    return {
+      provider: CLAUDE_AGENT_PROVIDER,
+      status: "error" as const,
+      available: false,
+      authStatus: "unknown" as const,
+      checkedAt,
+      message: detail
+        ? `Claude Agent CLI is installed but failed to run. ${detail}`
+        : "Claude Agent CLI is installed but failed to run.",
+    };
+  }
+
+  // Probe 2: claude auth status
+  const authProbe = yield* runClaudeCommand(["auth", "status"]).pipe(
+    Effect.timeoutOption(DEFAULT_TIMEOUT_MS),
+    Effect.result,
+  );
+
+  if (Result.isFailure(authProbe) || Option.isNone(authProbe.success)) {
+    return {
+      provider: CLAUDE_AGENT_PROVIDER,
+      status: "warning" as const,
+      available: true,
+      authStatus: "unknown" as const,
+      checkedAt,
+      message: "Could not verify Claude authentication status.",
+    };
+  }
+
+  const parsed = parseClaudeAuthStatusFromOutput(authProbe.success.value);
+  return {
+    provider: CLAUDE_AGENT_PROVIDER,
+    status: parsed.status,
+    available: true,
+    authStatus: parsed.authStatus,
+    checkedAt,
+    ...(parsed.message ? { message: parsed.message } : {}),
+  } satisfies ServerProviderStatus;
+});
+
 // ── Layer ───────────────────────────────────────────────────────────
 
 export const ProviderHealthLive = Layer.effect(
   ProviderHealth,
   Effect.gen(function* () {
     const codexStatus = yield* checkCodexProviderStatus;
+    const claudeStatus = yield* checkClaudeProviderStatus;
     const piStatus = yield* checkPiProviderStatus;
     return {
-      getStatuses: Effect.succeed([codexStatus, piStatus]),
+      getStatuses: Effect.succeed([codexStatus, claudeStatus, piStatus]),
     } satisfies ProviderHealthShape;
   }),
 );
