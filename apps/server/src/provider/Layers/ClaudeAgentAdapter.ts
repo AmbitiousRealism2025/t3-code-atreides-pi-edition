@@ -346,6 +346,19 @@ function makeClaudeAgentAdapter(_options?: ClaudeAgentAdapterLiveOptions) {
 
     const startSession: ClaudeAgentAdapterShape["startSession"] = (input) =>
       Effect.gen(function* () {
+        // Clean up any existing session for this thread (handles runtimeMode restarts)
+        const existingContext = sessions.get(input.threadId);
+        if (existingContext) {
+          existingContext.stopped = true;
+          try {
+            if (existingContext.queryRuntime && "abort" in existingContext.queryRuntime && typeof (existingContext.queryRuntime as any).abort === "function") {
+              (existingContext.queryRuntime as any).abort();
+            }
+          } catch (_) { /* best-effort cleanup */ }
+          yield* Queue.shutdown(existingContext.promptQueue);
+          sessions.delete(input.threadId);
+        }
+
         if (input.provider !== undefined && input.provider !== PROVIDER) {
           return yield* new ProviderAdapterValidationError({
             provider: PROVIDER,
@@ -403,7 +416,8 @@ function makeClaudeAgentAdapter(_options?: ClaudeAgentAdapterLiveOptions) {
         const canUseTool = (toolName: string, toolInput: Record<string, unknown>, callbackOptions: { signal: AbortSignal; toolUseID?: string }) =>
           Effect.runPromise(
             Effect.gen(function* () {
-              const runtimeMode = input.runtimeMode ?? "full-access";
+              // Read current runtimeMode from live session context (may change mid-session)
+              const runtimeMode = context.session.runtimeMode ?? input.runtimeMode ?? "full-access";
               if (runtimeMode === "full-access") {
                 return { behavior: "allow", updatedInput: toolInput } satisfies PermissionResult;
               }
