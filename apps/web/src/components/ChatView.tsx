@@ -4368,17 +4368,24 @@ const ProviderHealthBanner = memo(function ProviderHealthBanner({
     return null;
   }
 
+  const friendlyName = status.provider === "claudeAgent" ? "Claude Agent"
+    : status.provider === "codex" ? "Codex"
+    : status.provider === "pi" ? "Pi"
+    : status.provider;
   const defaultMessage =
     status.status === "error"
-      ? `${status.provider} provider is unavailable.`
-      : `${status.provider} provider has limited availability.`;
+      ? `${friendlyName} provider is unavailable.`
+      : `${friendlyName} provider has limited availability.`;
 
   return (
     <div className="pt-3 mx-auto max-w-3xl">
       <Alert variant={status.status === "error" ? "error" : "warning"}>
         <CircleAlertIcon />
         <AlertTitle>
-          {status.provider === "codex" ? "Codex provider status" : `${status.provider} status`}
+          {status.provider === "codex" ? "Codex provider status"
+            : status.provider === "claudeAgent" ? "Claude Agent status"
+            : status.provider === "pi" ? "Pi provider status"
+            : `${status.provider} status`}
         </AlertTitle>
         <AlertDescription className="line-clamp-3" title={status.message ?? defaultMessage}>
           {status.message ?? defaultMessage}
