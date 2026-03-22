@@ -211,6 +211,7 @@ import { newCommandId, newMessageId, newThreadId } from "~/lib/utils";
 import { readNativeApi } from "~/nativeApi";
 import {
   getAppModelOptions,
+  getCustomModelsForProvider,
   normalizeCustomModelSlugs,
   resolveAppModelSelection,
   useAppSettings,
@@ -797,8 +798,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
     selectedProvider,
     activeThread?.model ?? activeProject?.model ?? getDefaultModel(selectedProvider),
   );
-  const customModelsForSelectedProvider =
-    selectedProvider === "pi" ? settings.customPiModels : settings.customCodexModels;
+  const customModelsForSelectedProvider = getCustomModelsForProvider(settings, selectedProvider);
   const selectedModel = useMemo(() => {
     const draftModel = composerDraft.model;
     if (!draftModel) {
@@ -846,6 +846,12 @@ export default function ChatView({ threadId }: ChatViewProps) {
       };
       return Object.keys(codexOptions).length > 0 ? { codex: codexOptions } : undefined;
     }
+    if (selectedProvider === "claudeAgent") {
+      const claudeOptions = {
+        ...(supportsReasoningEffort && selectedEffort ? { effort: selectedEffort } : {}),
+      };
+      return Object.keys(claudeOptions).length > 0 ? { claudeAgent: claudeOptions } : undefined;
+    }
     if (selectedProvider === "pi" && supportsPiThinkingLevel && selectedPiThinkingLevel) {
       return {
         pi: {
@@ -886,7 +892,8 @@ export default function ChatView({ threadId }: ChatViewProps) {
       ...piCustomModels,
       ...unconfiguredBase.map(({ slug, name }) => ({ slug, name, isCustom: false, hasCredentials: false })),
     ];
-    return { codex: codexOptions, pi: piOptions };
+    const claudeOptions = getAppModelOptions("claudeAgent", settings.customClaudeModels ?? []);
+    return { codex: codexOptions, claudeAgent: claudeOptions, pi: piOptions };
   }, [settings, piModels, isPiModelsError]);
   const selectedModelForPickerWithCustomFallback = useMemo(() => {
     const currentOptions = modelOptionsByProvider[selectedProvider];
@@ -1007,6 +1014,44 @@ export default function ChatView({ threadId }: ChatViewProps) {
     activeProposedPlan !== null;
   const activePendingApproval = pendingApprovals[0] ?? null;
   const isComposerApprovalState = activePendingApproval !== null;
+
+  // ── Claude Agent countdown state ────────────────────────────────
+  const CLAUDE_COUNTDOWN_DURATION = 60;
+  const [claudeCountdownRemaining, setClaudeCountdownRemaining] = useState<number>(CLAUDE_COUNTDOWN_DURATION);
+  const claudeCountdownStartRef = useRef<number | null>(null);
+  const claudeCountdownRafRef = useRef<number>();
+  const isClaudeApproval = selectedProvider === "claudeAgent" && isComposerApprovalState;
+
+  useEffect(() => {
+    if (!isClaudeApproval || !activePendingApproval) {
+      claudeCountdownStartRef.current = null;
+      setClaudeCountdownRemaining(CLAUDE_COUNTDOWN_DURATION);
+      if (claudeCountdownRafRef.current) cancelAnimationFrame(claudeCountdownRafRef.current);
+      return;
+    }
+
+    claudeCountdownStartRef.current = Date.now();
+    setClaudeCountdownRemaining(CLAUDE_COUNTDOWN_DURATION);
+
+    const tick = () => {
+      if (!claudeCountdownStartRef.current) return;
+      const elapsed = (Date.now() - claudeCountdownStartRef.current) / 1000;
+      const next = Math.max(0, CLAUDE_COUNTDOWN_DURATION - elapsed);
+      setClaudeCountdownRemaining(next);
+
+      if (next <= 0) {
+        // Auto-approve
+        void onRespondToApproval(activePendingApproval.requestId, "accept");
+        return;
+      }
+      claudeCountdownRafRef.current = requestAnimationFrame(tick);
+    };
+
+    claudeCountdownRafRef.current = requestAnimationFrame(tick);
+    return () => {
+      if (claudeCountdownRafRef.current) cancelAnimationFrame(claudeCountdownRafRef.current);
+    };
+  }, [isClaudeApproval, activePendingApproval?.requestId]);
   const hasComposerHeader =
     isComposerApprovalState ||
     pendingUserInputs.length > 0 ||
@@ -3200,7 +3245,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
         activeThread.id,
         resolveAppModelSelection(
           provider,
-          provider === "pi" ? settings.customPiModels : settings.customCodexModels,
+          getCustomModelsForProvider(settings, provider),
           model,
         ),
       );
@@ -3639,6 +3684,9 @@ export default function ChatView({ threadId }: ChatViewProps) {
                 <ComposerPendingApprovalPanel
                   approval={activePendingApproval}
                   pendingCount={pendingApprovals.length}
+                  provider={selectedProvider}
+                  countdownRemaining={isClaudeApproval ? claudeCountdownRemaining : undefined}
+                  countdownDuration={CLAUDE_COUNTDOWN_DURATION}
                 />
               </div>
             ) : pendingUserInputs.length > 0 ? (
@@ -3808,6 +3856,16 @@ export default function ChatView({ threadId }: ChatViewProps) {
                         options={reasoningOptions}
                         onEffortChange={onEffortSelect}
                         onFastModeChange={onCodexFastModeChange}
+                      />
+                    </>
+                  ) : null}
+                  {selectedProvider === "claudeAgent" && selectedEffort != null ? (
+                    <>
+                      <Separator orientation="vertical" className="mx-0.5 hidden h-4 sm:block" />
+                      <ClaudeTraitsPicker
+                        effort={selectedEffort}
+                        options={reasoningOptions}
+                        onEffortChange={onEffortSelect}
                       />
                     </>
                   ) : null}
@@ -4351,17 +4409,24 @@ const ProviderHealthBanner = memo(function ProviderHealthBanner({
     return null;
   }
 
+  const friendlyName = status.provider === "claudeAgent" ? "Claude Agent"
+    : status.provider === "codex" ? "Codex"
+    : status.provider === "pi" ? "Pi"
+    : status.provider;
   const defaultMessage =
     status.status === "error"
-      ? `${status.provider} provider is unavailable.`
-      : `${status.provider} provider has limited availability.`;
+      ? `${friendlyName} provider is unavailable.`
+      : `${friendlyName} provider has limited availability.`;
 
   return (
     <div className="pt-3 mx-auto max-w-3xl">
       <Alert variant={status.status === "error" ? "error" : "warning"}>
         <CircleAlertIcon />
         <AlertTitle>
-          {status.provider === "codex" ? "Codex provider status" : `${status.provider} status`}
+          {status.provider === "codex" ? "Codex provider status"
+            : status.provider === "claudeAgent" ? "Claude Agent status"
+            : status.provider === "pi" ? "Pi provider status"
+            : `${status.provider} status`}
         </AlertTitle>
         <AlertDescription className="line-clamp-3" title={status.message ?? defaultMessage}>
           {status.message ?? defaultMessage}
@@ -4374,11 +4439,17 @@ const ProviderHealthBanner = memo(function ProviderHealthBanner({
 interface ComposerPendingApprovalPanelProps {
   approval: PendingApproval;
   pendingCount: number;
+  provider?: ProviderKind;
+  countdownRemaining?: number;
+  countdownDuration?: number;
 }
 
 const ComposerPendingApprovalPanel = memo(function ComposerPendingApprovalPanel({
   approval,
   pendingCount,
+  provider,
+  countdownRemaining,
+  countdownDuration = 60,
 }: ComposerPendingApprovalPanelProps) {
   const approvalSummary =
     approval.requestKind === "command"
@@ -4386,6 +4457,24 @@ const ComposerPendingApprovalPanel = memo(function ComposerPendingApprovalPanel(
       : approval.requestKind === "file-read"
         ? "File-read approval requested"
         : "File-change approval requested";
+
+  const isClaudeCountdown = provider === "claudeAgent" && countdownRemaining !== undefined;
+
+  // Phase calculation for Claude countdown
+  const phase = !isClaudeCountdown ? "calm" as const
+    : countdownRemaining > 20 ? "calm" as const
+    : countdownRemaining > 10 ? "warm" as const
+    : countdownRemaining > 5 ? "urgent" as const
+    : "critical" as const;
+
+  const progressPercent = isClaudeCountdown
+    ? Math.max(0, (countdownRemaining / countdownDuration) * 100)
+    : 100;
+
+  const phaseBarClass =
+    phase === "calm" ? "bg-accent"
+    : phase === "warm" ? "bg-warning"
+    : "bg-destructive";
 
   return (
     <div className="px-4 py-3.5 sm:px-5 sm:py-4">
@@ -4395,7 +4484,31 @@ const ComposerPendingApprovalPanel = memo(function ComposerPendingApprovalPanel(
         {pendingCount > 1 ? (
           <span className="text-xs text-muted-foreground">1/{pendingCount}</span>
         ) : null}
+        {isClaudeCountdown && (
+          <span className={cn(
+            "ml-auto text-xs transition-colors duration-500",
+            phase === "urgent" || phase === "critical" ? "text-destructive" : "text-muted-foreground/60",
+          )}>
+            auto in {Math.ceil(countdownRemaining)}s
+          </span>
+        )}
       </div>
+      {approval.detail && (
+        <div className="mt-1.5 truncate font-mono text-xs text-muted-foreground/70">
+          {approval.detail}
+        </div>
+      )}
+      {isClaudeCountdown && (
+        <div className="mt-2 h-[3px] w-full overflow-hidden rounded-full bg-muted/50">
+          <div
+            className={cn("h-full rounded-full transition-colors duration-500", phaseBarClass)}
+            style={{
+              width: `${progressPercent}%`,
+              transition: "width 100ms linear, background-color 500ms",
+            }}
+          />
+        </div>
+      )}
     </div>
   );
 });
@@ -5623,7 +5736,7 @@ function isAvailableProviderOption(option: (typeof PROVIDER_OPTIONS)[number]): o
   label: string;
   available: true;
 } {
-  return option.available && option.value !== "claudeCode";
+  return option.available;
 }
 
 const AVAILABLE_PROVIDER_OPTIONS = PROVIDER_OPTIONS.filter(isAvailableProviderOption);
@@ -5635,8 +5748,8 @@ const COMING_SOON_PROVIDER_OPTIONS = [
 
 const PROVIDER_ICON_BY_PROVIDER: Record<ProviderPickerKind, Icon> = {
   codex: OpenAI,
+  claudeAgent: ClaudeAI,
   pi: Sparkles,
-  claudeCode: ClaudeAI,
   cursor: CursorIcon,
 };
 
@@ -5837,7 +5950,7 @@ const ProviderModelPicker = memo(function ProviderModelPicker(props: {
                 aria-hidden="true"
                 className={cn(
                   "size-4 shrink-0 opacity-80",
-                  option.value === "claudeCode" ? "" : "text-muted-foreground/85",
+                  "text-muted-foreground/85",
                 )}
               />
               <span>{option.label}</span>
@@ -5937,6 +6050,64 @@ const CodexTraitsPicker = memo(function CodexTraitsPicker(props: {
           >
             <MenuRadioItem value="off">off</MenuRadioItem>
             <MenuRadioItem value="on">on</MenuRadioItem>
+          </MenuRadioGroup>
+        </MenuGroup>
+      </MenuPopup>
+    </Menu>
+  );
+});
+
+const ClaudeTraitsPicker = memo(function ClaudeTraitsPicker(props: {
+  effort: CodexReasoningEffort;
+  options: ReadonlyArray<CodexReasoningEffort>;
+  onEffortChange: (effort: CodexReasoningEffort) => void;
+}) {
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const defaultEffort = getDefaultReasoningEffort("claudeAgent");
+  const effortLabels: Record<string, string> = {
+    low: "Low",
+    medium: "Medium",
+    high: "High",
+    max: "Max (Ultrathink)",
+  };
+
+  return (
+    <Menu
+      open={isMenuOpen}
+      onOpenChange={(open) => {
+        setIsMenuOpen(open);
+      }}
+    >
+      <MenuTrigger
+        render={
+          <Button
+            size="sm"
+            variant="ghost"
+            className="shrink-0 whitespace-nowrap px-2 text-muted-foreground/70 hover:text-foreground/80 sm:px-3"
+          />
+        }
+      >
+        <span>{effortLabels[props.effort] ?? props.effort}</span>
+        <ChevronDownIcon aria-hidden="true" className="size-3 opacity-60" />
+      </MenuTrigger>
+      <MenuPopup align="start">
+        <MenuGroup>
+          <div className="px-2 py-1.5 font-medium text-muted-foreground text-xs">Thinking Effort</div>
+          <MenuRadioGroup
+            value={props.effort}
+            onValueChange={(value) => {
+              if (!value) return;
+              const nextEffort = props.options.find((option) => option === value);
+              if (!nextEffort) return;
+              props.onEffortChange(nextEffort);
+            }}
+          >
+            {props.options.map((effort) => (
+              <MenuRadioItem key={effort} value={effort}>
+                {effortLabels[effort] ?? effort}
+                {effort === defaultEffort ? " (default)" : ""}
+              </MenuRadioItem>
+            ))}
           </MenuRadioGroup>
         </MenuGroup>
       </MenuPopup>

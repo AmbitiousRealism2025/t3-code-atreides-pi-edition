@@ -4,6 +4,7 @@ import {
   PI_THINKING_LEVEL_OPTIONS,
   REASONING_EFFORT_OPTIONS_BY_PROVIDER,
   ThreadId,
+  isRegisteredProviderId,
   type CodexReasoningEffort,
   type PiThinkingLevel,
   type ProviderKind,
@@ -178,7 +179,7 @@ const EMPTY_THREAD_DRAFT = Object.freeze({
 }) as ComposerThreadDraftState;
 
 const REASONING_EFFORT_VALUES = new Set<CodexReasoningEffort>(
-  REASONING_EFFORT_OPTIONS_BY_PROVIDER.codex,
+  Object.values(REASONING_EFFORT_OPTIONS_BY_PROVIDER).flat() as CodexReasoningEffort[],
 );
 const PI_THINKING_LEVEL_VALUES = new Set<PiThinkingLevel>(PI_THINKING_LEVEL_OPTIONS);
 
@@ -220,7 +221,8 @@ function shouldRemoveDraft(draft: ComposerThreadDraftState): boolean {
 }
 
 function normalizeProviderKind(value: unknown): ProviderKind | null {
-  return value === "codex" || value === "pi" ? value : null;
+  if (typeof value !== "string") return null;
+  return isRegisteredProviderId(value) ? (value as ProviderKind) : null;
 }
 
 function revokeObjectPreviewUrl(previewUrl: string): void {

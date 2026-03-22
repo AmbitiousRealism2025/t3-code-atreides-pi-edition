@@ -1,4 +1,5 @@
 import {
+  BUILT_IN_MODEL_SLUGS_BY_PROVIDER,
   CODEX_REASONING_EFFORT_OPTIONS,
   DEFAULT_MODEL_BY_PROVIDER,
   DEFAULT_REASONING_EFFORT_BY_PROVIDER,
@@ -12,12 +13,7 @@ import {
   type ProviderKind,
 } from "@t3tools/contracts";
 
-type CatalogProvider = keyof typeof MODEL_OPTIONS_BY_PROVIDER;
-
-const MODEL_SLUG_SET_BY_PROVIDER: Record<CatalogProvider, ReadonlySet<ModelSlug>> = {
-  codex: new Set(MODEL_OPTIONS_BY_PROVIDER.codex.map((option) => option.slug)),
-  pi: new Set(MODEL_OPTIONS_BY_PROVIDER.pi.map((option) => option.slug)),
-};
+const MODEL_SLUG_SET_BY_PROVIDER = BUILT_IN_MODEL_SLUGS_BY_PROVIDER;
 // Providers whose models support Pi's --thinking flag.
 // Stage 3 TODO: replace with capability metadata from Pi SDK ModelDefinition.capabilities.reasoning.
 // For now: all Anthropic and OpenAI Codex models support thinking via Pi.
@@ -101,6 +97,45 @@ export function getDefaultReasoningEffort(
   provider: ProviderKind = "codex",
 ): CodexReasoningEffort | null {
   return DEFAULT_REASONING_EFFORT_BY_PROVIDER[provider];
+}
+
+// ── Claude-specific helpers ─────────────────────────────────────────
+
+export function resolveReasoningEffortForProvider(
+  provider: ProviderKind,
+  effort: string | null | undefined,
+): string | null {
+  if (typeof effort !== "string") return null;
+  const trimmed = effort.trim();
+  if (!trimmed) return null;
+  const options = REASONING_EFFORT_OPTIONS_BY_PROVIDER[provider] as readonly string[];
+  return options.includes(trimmed) ? trimmed : null;
+}
+
+const CLAUDE_OPUS_4_6_MODEL = "claude-opus-4-6";
+const CLAUDE_SONNET_4_6_MODEL = "claude-sonnet-4-6";
+const CLAUDE_HAIKU_4_5_MODEL = "claude-haiku-4-5";
+
+export function supportsClaudeFastMode(model: string | null | undefined): boolean {
+  return normalizeModelSlug(model, "claudeAgent") === CLAUDE_OPUS_4_6_MODEL;
+}
+
+export function supportsClaudeThinkingToggle(model: string | null | undefined): boolean {
+  return normalizeModelSlug(model, "claudeAgent") === CLAUDE_HAIKU_4_5_MODEL;
+}
+
+export function supportsClaudeAdaptiveReasoning(model: string | null | undefined): boolean {
+  const normalized = normalizeModelSlug(model, "claudeAgent");
+  return normalized === CLAUDE_OPUS_4_6_MODEL || normalized === CLAUDE_SONNET_4_6_MODEL;
+}
+
+export type ClaudeCodeEffort = "low" | "medium" | "high" | "max" | "ultrathink";
+
+export function getEffectiveClaudeCodeEffort(
+  effort: ClaudeCodeEffort | string | null | undefined,
+): Exclude<ClaudeCodeEffort, "ultrathink"> | null {
+  if (!effort) return null;
+  return effort === "ultrathink" ? null : (effort as Exclude<ClaudeCodeEffort, "ultrathink">);
 }
 
 export { CODEX_REASONING_EFFORT_OPTIONS, PI_THINKING_LEVEL_OPTIONS };

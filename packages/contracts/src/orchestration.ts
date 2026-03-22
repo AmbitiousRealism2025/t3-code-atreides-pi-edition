@@ -1,5 +1,6 @@
 import { Option, Schema, SchemaIssue, Struct } from "effect";
 import { ProviderModelOptions } from "./model";
+import { PROVIDER_ID_LIST } from "./providers/registry";
 import {
   ApprovalRequestId,
   CheckpointRef,
@@ -27,7 +28,7 @@ export const ORCHESTRATION_WS_CHANNELS = {
   domainEvent: "orchestration.domainEvent",
 } as const;
 
-export const ProviderKind = Schema.Literals(["codex", "pi"]);
+export const ProviderKind = Schema.Literals(PROVIDER_ID_LIST);
 export type ProviderKind = typeof ProviderKind.Type;
 export const ProviderApprovalPolicy = Schema.Literals([
   "untrusted",
@@ -47,8 +48,14 @@ const CodexProviderStartOptions = Schema.Struct({
   binaryPath: Schema.optional(TrimmedNonEmptyString),
   homePath: Schema.optional(TrimmedNonEmptyString),
 });
+const ClaudeProviderStartOptions = Schema.Struct({
+  binaryPath: Schema.optional(TrimmedNonEmptyString),
+  permissionMode: Schema.optional(TrimmedNonEmptyString),
+  maxThinkingTokens: Schema.optional(NonNegativeInt),
+});
 const ProviderStartOptions = Schema.Struct({
   codex: Schema.optional(CodexProviderStartOptions),
+  claudeAgent: Schema.optional(ClaudeProviderStartOptions),
 });
 export const RuntimeMode = Schema.Literals(["approval-required", "full-access"]);
 export type RuntimeMode = typeof RuntimeMode.Type;

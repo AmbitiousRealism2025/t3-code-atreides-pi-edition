@@ -7,20 +7,20 @@ import {
   type ProviderKind,
   type UserInputQuestion,
   type TurnId,
+  PROVIDER_PICKER_OPTIONS,
 } from "@t3tools/contracts";
 
 import type { ChatMessage, ProposedPlan, SessionPhase, ThreadSession, TurnDiffSummary } from "./types";
 
-export type ProviderPickerKind = ProviderKind | "claudeCode" | "cursor";
+export type ProviderPickerKind = ProviderKind | "cursor";
 
+// Registry-derived provider options + non-registry placeholders
 export const PROVIDER_OPTIONS: Array<{
   value: ProviderPickerKind;
   label: string;
   available: boolean;
 }> = [
-  { value: "codex", label: "Codex", available: true },
-  { value: "pi", label: "Pi", available: true },
-  { value: "claudeCode", label: "Claude Code", available: false },
+  ...PROVIDER_PICKER_OPTIONS,
   { value: "cursor", label: "Cursor", available: false },
 ];
 

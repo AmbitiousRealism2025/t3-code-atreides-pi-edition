@@ -15,6 +15,7 @@ import {
   ProviderAdapterRegistry,
   type ProviderAdapterRegistryShape,
 } from "../Services/ProviderAdapterRegistry.ts";
+import { ClaudeAgentAdapter } from "../Services/ClaudeAgentAdapter.ts";
 import { CodexAdapter } from "../Services/CodexAdapter.ts";
 import { PiAdapter } from "../Services/PiAdapter.ts";
 
@@ -27,7 +28,7 @@ const makeProviderAdapterRegistry = (options?: ProviderAdapterRegistryLiveOption
     const adapters =
       options?.adapters !== undefined
         ? options.adapters
-        : [yield* CodexAdapter, yield* PiAdapter];
+        : [yield* CodexAdapter, yield* ClaudeAgentAdapter, yield* PiAdapter];
     const byProvider = new Map(adapters.map((adapter) => [adapter.provider, adapter]));
 
     const getByProvider: ProviderAdapterRegistryShape["getByProvider"] = (provider) => {

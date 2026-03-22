@@ -1,15 +1,11 @@
 import { useCallback, useSyncExternalStore } from "react";
 import { Option, Schema } from "effect";
-import { type ProviderKind } from "@t3tools/contracts";
+import { type ProviderKind, BUILT_IN_MODEL_SLUGS_BY_PROVIDER } from "@t3tools/contracts";
 import { getDefaultModel, getModelOptions, normalizeModelSlug } from "@t3tools/shared/model";
 
 const APP_SETTINGS_STORAGE_KEY = "t3code:app-settings:v1";
 const MAX_CUSTOM_MODEL_COUNT = 32;
 export const MAX_CUSTOM_MODEL_LENGTH = 256;
-const BUILT_IN_MODEL_SLUGS_BY_PROVIDER: Record<ProviderKind, ReadonlySet<string>> = {
-  codex: new Set(getModelOptions("codex").map((option) => option.slug)),
-  pi: new Set(getModelOptions("pi").map((option) => option.slug)),
-};
 
 const AppSettingsSchema = Schema.Struct({
   codexBinaryPath: Schema.String.check(Schema.isMaxLength(4096)).pipe(
@@ -23,6 +19,9 @@ const AppSettingsSchema = Schema.Struct({
     Schema.withConstructorDefault(() => Option.some(false)),
   ),
   customCodexModels: Schema.Array(Schema.String).pipe(
+    Schema.withConstructorDefault(() => Option.some([])),
+  ),
+  customClaudeModels: Schema.Array(Schema.String).pipe(
     Schema.withConstructorDefault(() => Option.some([])),
   ),
   customPiModels: Schema.Array(Schema.String).pipe(
@@ -75,8 +74,22 @@ function normalizeAppSettings(settings: AppSettings): AppSettings {
   return {
     ...settings,
     customCodexModels: normalizeCustomModelSlugs(settings.customCodexModels, "codex"),
+    customClaudeModels: normalizeCustomModelSlugs(settings.customClaudeModels, "claudeAgent"),
     customPiModels: normalizeCustomModelSlugs(settings.customPiModels, "pi"),
   };
+}
+
+/** Get custom model slugs for a given provider from settings */
+export function getCustomModelsForProvider(
+  settings: AppSettings,
+  provider: ProviderKind,
+): readonly string[] {
+  switch (provider) {
+    case "codex": return settings.customCodexModels;
+    case "claudeAgent": return settings.customClaudeModels ?? [];
+    case "pi": return settings.customPiModels;
+    default: return [];
+  }
 }
 
 export function getAppModelOptions(
