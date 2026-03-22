@@ -3818,6 +3818,16 @@ export default function ChatView({ threadId }: ChatViewProps) {
                       />
                     </>
                   ) : null}
+                  {selectedProvider === "claudeAgent" && selectedEffort != null ? (
+                    <>
+                      <Separator orientation="vertical" className="mx-0.5 hidden h-4 sm:block" />
+                      <ClaudeTraitsPicker
+                        effort={selectedEffort}
+                        options={reasoningOptions}
+                        onEffortChange={onEffortSelect}
+                      />
+                    </>
+                  ) : null}
                   {selectedProvider === "pi" && supportsPiThinkingLevel ? (
                     <>
                       <Separator orientation="vertical" className="mx-0.5 hidden h-4 sm:block" />
@@ -5944,6 +5954,64 @@ const CodexTraitsPicker = memo(function CodexTraitsPicker(props: {
           >
             <MenuRadioItem value="off">off</MenuRadioItem>
             <MenuRadioItem value="on">on</MenuRadioItem>
+          </MenuRadioGroup>
+        </MenuGroup>
+      </MenuPopup>
+    </Menu>
+  );
+});
+
+const ClaudeTraitsPicker = memo(function ClaudeTraitsPicker(props: {
+  effort: CodexReasoningEffort;
+  options: ReadonlyArray<CodexReasoningEffort>;
+  onEffortChange: (effort: CodexReasoningEffort) => void;
+}) {
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const defaultEffort = getDefaultReasoningEffort("claudeAgent");
+  const effortLabels: Record<string, string> = {
+    low: "Low",
+    medium: "Medium",
+    high: "High",
+    max: "Max (Ultrathink)",
+  };
+
+  return (
+    <Menu
+      open={isMenuOpen}
+      onOpenChange={(open) => {
+        setIsMenuOpen(open);
+      }}
+    >
+      <MenuTrigger
+        render={
+          <Button
+            size="sm"
+            variant="ghost"
+            className="shrink-0 whitespace-nowrap px-2 text-muted-foreground/70 hover:text-foreground/80 sm:px-3"
+          />
+        }
+      >
+        <span>{effortLabels[props.effort] ?? props.effort}</span>
+        <ChevronDownIcon aria-hidden="true" className="size-3 opacity-60" />
+      </MenuTrigger>
+      <MenuPopup align="start">
+        <MenuGroup>
+          <div className="px-2 py-1.5 font-medium text-muted-foreground text-xs">Thinking Effort</div>
+          <MenuRadioGroup
+            value={props.effort}
+            onValueChange={(value) => {
+              if (!value) return;
+              const nextEffort = props.options.find((option) => option === value);
+              if (!nextEffort) return;
+              props.onEffortChange(nextEffort);
+            }}
+          >
+            {props.options.map((effort) => (
+              <MenuRadioItem key={effort} value={effort}>
+                {effortLabels[effort] ?? effort}
+                {effort === defaultEffort ? " (default)" : ""}
+              </MenuRadioItem>
+            ))}
           </MenuRadioGroup>
         </MenuGroup>
       </MenuPopup>

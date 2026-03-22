@@ -179,7 +179,7 @@ const EMPTY_THREAD_DRAFT = Object.freeze({
 }) as ComposerThreadDraftState;
 
 const REASONING_EFFORT_VALUES = new Set<CodexReasoningEffort>(
-  REASONING_EFFORT_OPTIONS_BY_PROVIDER.codex,
+  Object.values(REASONING_EFFORT_OPTIONS_BY_PROVIDER).flat() as CodexReasoningEffort[],
 );
 const PI_THINKING_LEVEL_VALUES = new Set<PiThinkingLevel>(PI_THINKING_LEVEL_OPTIONS);
 
