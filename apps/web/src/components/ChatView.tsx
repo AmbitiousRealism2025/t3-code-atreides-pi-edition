@@ -211,6 +211,7 @@ import { newCommandId, newMessageId, newThreadId } from "~/lib/utils";
 import { readNativeApi } from "~/nativeApi";
 import {
   getAppModelOptions,
+  getCustomModelsForProvider,
   normalizeCustomModelSlugs,
   resolveAppModelSelection,
   useAppSettings,
@@ -797,10 +798,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
     selectedProvider,
     activeThread?.model ?? activeProject?.model ?? getDefaultModel(selectedProvider),
   );
-  const customModelsForSelectedProvider =
-    selectedProvider === "pi" ? settings.customPiModels
-    : selectedProvider === "claudeAgent" ? (settings.customClaudeModels ?? [])
-    : settings.customCodexModels;
+  const customModelsForSelectedProvider = getCustomModelsForProvider(settings, selectedProvider);
   const selectedModel = useMemo(() => {
     const draftModel = composerDraft.model;
     if (!draftModel) {
@@ -3209,9 +3207,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
         activeThread.id,
         resolveAppModelSelection(
           provider,
-          provider === "pi" ? settings.customPiModels
-          : provider === "claudeAgent" ? (settings.customClaudeModels ?? [])
-          : settings.customCodexModels,
+          getCustomModelsForProvider(settings, provider),
           model,
         ),
       );

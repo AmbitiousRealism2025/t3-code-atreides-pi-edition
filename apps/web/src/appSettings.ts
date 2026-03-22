@@ -79,6 +79,19 @@ function normalizeAppSettings(settings: AppSettings): AppSettings {
   };
 }
 
+/** Get custom model slugs for a given provider from settings */
+export function getCustomModelsForProvider(
+  settings: AppSettings,
+  provider: ProviderKind,
+): readonly string[] {
+  switch (provider) {
+    case "codex": return settings.customCodexModels;
+    case "claudeAgent": return settings.customClaudeModels ?? [];
+    case "pi": return settings.customPiModels;
+    default: return [];
+  }
+}
+
 export function getAppModelOptions(
   provider: ProviderKind,
   customModels: readonly string[],
