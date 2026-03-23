@@ -408,7 +408,7 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
           type: "error",
           title: "Action failed",
           description: err instanceof Error ? err.message : "An error occurred.",
-          data: threadToastData,
+          data: { ...threadToastData, dismissAfterVisibleMs: 15_000 },
         });
       }
     },
