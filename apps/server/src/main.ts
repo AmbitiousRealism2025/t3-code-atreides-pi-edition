@@ -170,10 +170,11 @@ const ServerConfigLive = (input: CliInput) =>
       const staticDir = devUrl ? undefined : yield* cliConfig.resolveStaticDir;
       const { join } = yield* Path.Path;
       const keybindingsConfigPath = join(stateDir, "keybindings.json");
+      // Default to loopback. Explicit T3CODE_HOST or --host required for non-loopback binding.
       const host =
         Option.getOrUndefined(input.host) ??
         env.host ??
-        (mode === "desktop" ? "127.0.0.1" : undefined);
+        "127.0.0.1";
 
       const config: ServerConfigShape = {
         mode,
