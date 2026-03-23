@@ -40,7 +40,19 @@ async function discoverPiModels(): Promise<PiModelList> {
       available.map((m: { provider: string; id: string }) => `${m.provider}/${m.id}`),
     );
 
-    if (all.length === 0) {
+    // Filter out deprecated models that are no longer accessible
+    const DEPRECATED_MODEL_PATTERNS = [
+      /claude-3-/, /claude-3\./, // Claude 3.x family (Haiku 3, Sonnet 3, Opus 3)
+      /claude-3\.5-/, // Claude 3.5 family
+      /claude-haiku-3/, /claude-sonnet-3/, /claude-opus-3/,
+      /gpt-4o/, /gpt-4-/, /gpt-3/, // Legacy GPT models
+    ];
+    const isDeprecated = (slug: string) =>
+      DEPRECATED_MODEL_PATTERNS.some((pattern) => pattern.test(slug));
+    const filteredAll = (all as Array<{ provider: string; id: string; name?: string; reasoning?: boolean; capabilities?: { reasoning?: boolean } }>)
+      .filter((m) => !isDeprecated(`${m.provider}/${m.id}`));
+
+    if (filteredAll.length === 0) {
       const result: PiModelList = { configured: [], unconfigured: [], reason: "no_credentials" };
       cache = { models: result, expiresAt: now + CACHE_TTL_MS };
       return result;
@@ -49,7 +61,7 @@ async function discoverPiModels(): Promise<PiModelList> {
     const configured: Array<{ slug: string; name: string; supportsThinking: boolean }> = [];
     const unconfigured: Array<{ slug: string; name: string; supportsThinking: boolean }> = [];
 
-    for (const m of all as Array<{ provider: string; id: string; name?: string; reasoning?: boolean; capabilities?: { reasoning?: boolean } }>) {
+    for (const m of filteredAll) {
       const slug = `${m.provider}/${m.id}`;
       // SDK exposes reasoning as a direct field on the model object (not nested under capabilities)
       const supportsThinking = m.reasoning === true || m.capabilities?.reasoning === true;
