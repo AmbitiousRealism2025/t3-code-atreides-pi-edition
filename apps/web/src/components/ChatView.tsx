@@ -19,6 +19,7 @@ import {
   type ProviderKind,
   type ThreadId,
   type TurnId,
+  type ClientOrchestrationCommand,
   OrchestrationThreadActivity,
   RuntimeMode,
   ProviderInteractionMode,
@@ -1019,7 +1020,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
   const CLAUDE_COUNTDOWN_DURATION = 60;
   const [claudeCountdownRemaining, setClaudeCountdownRemaining] = useState<number>(CLAUDE_COUNTDOWN_DURATION);
   const claudeCountdownStartRef = useRef<number | null>(null);
-  const claudeCountdownRafRef = useRef<number>();
+  const claudeCountdownRafRef = useRef<number | undefined>(undefined);
   const isClaudeApproval = selectedProvider === "claudeAgent" && isComposerApprovalState;
 
   useEffect(() => {
@@ -2778,19 +2779,19 @@ export default function ChatView({ threadId }: ChatViewProps) {
           text: trimmed || IMAGE_ONLY_BOOTSTRAP_PROMPT,
           attachments: turnAttachments,
         },
-        model: selectedModel || undefined,
+        ...(selectedModel ? { model: selectedModel } : {}),
         ...(selectedModelOptionsForDispatch
           ? { modelOptions: selectedModelOptionsForDispatch }
           : {}),
         ...(providerOptionsForDispatch
           ? { providerOptions: providerOptionsForDispatch }
           : {}),
-        provider: selectedProvider,
+        ...(selectedProvider ? { provider: selectedProvider } : {}),
         assistantDeliveryMode: settings.enableAssistantStreaming ? "streaming" : "buffered",
         runtimeMode,
         interactionMode,
         createdAt: messageCreatedAt,
-      });
+      } as ClientOrchestrationCommand);
       turnStartSucceeded = true;
       if (isFirstMessage) {
         clearDraftThread(threadIdForSend);
@@ -3057,8 +3058,8 @@ export default function ChatView({ threadId }: ChatViewProps) {
             text: trimmed,
             attachments: [],
           },
-          provider: selectedProvider,
-          model: selectedModel || undefined,
+          ...(selectedProvider ? { provider: selectedProvider } : {}),
+          ...(selectedModel ? { model: selectedModel } : {}),
           ...(selectedModelOptionsForDispatch
             ? { modelOptions: selectedModelOptionsForDispatch }
             : {}),
@@ -3069,7 +3070,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
           runtimeMode,
           interactionMode: nextInteractionMode,
           createdAt: messageCreatedAt,
-        });
+        } as ClientOrchestrationCommand);
         // Optimistically open the plan sidebar when implementing (not refining).
         // "default" mode here means the agent is executing the plan, which produces
         // step-tracking activities that the sidebar will display.
@@ -3168,8 +3169,8 @@ export default function ChatView({ threadId }: ChatViewProps) {
             text: implementationPrompt,
             attachments: [],
           },
-          provider: selectedProvider,
-          model: selectedModel || undefined,
+          ...(selectedProvider ? { provider: selectedProvider } : {}),
+          ...(selectedModel ? { model: selectedModel } : {}),
           ...(selectedModelOptionsForDispatch
             ? { modelOptions: selectedModelOptionsForDispatch }
             : {}),
@@ -3180,7 +3181,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
           runtimeMode,
           interactionMode: "default",
           createdAt,
-        });
+        } as ClientOrchestrationCommand);
       })
       .then(() => api.orchestration.getSnapshot())
       .then((snapshot) => {
@@ -4440,7 +4441,7 @@ interface ComposerPendingApprovalPanelProps {
   approval: PendingApproval;
   pendingCount: number;
   provider?: ProviderKind;
-  countdownRemaining?: number;
+  countdownRemaining?: number | undefined;
   countdownDuration?: number;
 }
 
@@ -5992,6 +5993,7 @@ const CodexTraitsPicker = memo(function CodexTraitsPicker(props: {
     medium: "Medium",
     high: "High",
     xhigh: "Extra High",
+    max: "Max",
   };
   const triggerLabel = [
     reasoningLabelByOption[props.effort],

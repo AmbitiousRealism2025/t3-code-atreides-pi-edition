@@ -100,7 +100,7 @@ export const ToolApprovalCard = memo(function ToolApprovalCard(props: ToolApprov
   const [status, setStatus] = useState<ToolApprovalStatus>("pending");
   const [remaining, setRemaining] = useState(duration);
   const startTimeRef = useRef(Date.now());
-  const rafRef = useRef<number>();
+  const rafRef = useRef<number>(undefined as unknown as number);
 
   const phase = useMemo(() => getPhase(remaining), [remaining]);
   const progressPercent = useMemo(() => Math.max(0, (remaining / duration) * 100), [remaining, duration]);
