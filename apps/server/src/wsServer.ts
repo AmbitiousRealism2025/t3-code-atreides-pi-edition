@@ -525,13 +525,20 @@ export const createServer = Effect.fn(function* (): Effect.fn.Return<
         // Pi model discovery endpoint
         if (url.pathname === "/api/provider/pi/models") {
           const corsHeaders = {
-            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Origin": "http://localhost",
             "Access-Control-Allow-Methods": "GET, OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type",
+            "Access-Control-Allow-Headers": "Content-Type, Authorization",
           };
           if (req.method === "OPTIONS") {
             respond(204, corsHeaders);
             return;
+          }
+          if (authToken) {
+            const bearerToken = req.headers.authorization?.replace("Bearer ", "") ?? url.searchParams.get("token");
+            if (bearerToken !== authToken) {
+              respond(401, corsHeaders, "Unauthorized");
+              return;
+            }
           }
           if (req.method === "GET") {
             const modelList = yield* piModelDiscovery.getModels;
@@ -547,13 +554,20 @@ export const createServer = Effect.fn(function* (): Effect.fn.Return<
         // Pi activity bridge endpoint
         if (url.pathname === "/api/provider/pi/activity") {
           const corsHeaders = {
-            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Origin": "http://localhost",
             "Access-Control-Allow-Methods": "POST, OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type",
+            "Access-Control-Allow-Headers": "Content-Type, Authorization",
           };
           if (req.method === "OPTIONS") {
             respond(204, corsHeaders);
             return;
+          }
+          if (authToken) {
+            const bearerToken = req.headers.authorization?.replace("Bearer ", "") ?? url.searchParams.get("token");
+            if (bearerToken !== authToken) {
+              respond(401, corsHeaders, "Unauthorized");
+              return;
+            }
           }
           if (req.method === "POST") {
             const rawBody = yield* Effect.tryPromise({
