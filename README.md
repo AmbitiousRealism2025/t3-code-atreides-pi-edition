@@ -6,7 +6,7 @@
 
 **A fork of T3 Code with Pi as a first-class provider, Caladan Night theming, and Atreides platform design.**
 
-[![Version](https://img.shields.io/badge/version-0.2.1-teal)](https://github.com/AmbitiousRealism2025/t3-code-atreides-pi-edition/releases)
+[![Version](https://img.shields.io/badge/version-0.2.2-teal)](https://github.com/AmbitiousRealism2025/t3-code-atreides-pi-edition/releases)
 [![License](https://img.shields.io/badge/license-MIT-blue)](./LICENSE)
 [![Built on T3 Code](https://img.shields.io/badge/built%20on-T3%20Code-blueviolet)](https://github.com/pingdotgg/t3code)
 
