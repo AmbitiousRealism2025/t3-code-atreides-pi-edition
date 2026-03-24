@@ -48,7 +48,7 @@ export class ServerConfig extends ServiceMap.Service<ServerConfig, ServerConfigS
           autoBootstrapProjectFromCwd: false,
           logWebSocketEvents: false,
           port: 0,
-          host: undefined,
+          host: "127.0.0.1",
           authToken: undefined,
           keybindingsConfigPath: path.join(statedir, "keybindings.json"),
           staticDir: undefined,

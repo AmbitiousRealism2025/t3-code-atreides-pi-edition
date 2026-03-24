@@ -680,19 +680,19 @@ describe("deriveActiveWorkStartedAt", () => {
 });
 
 describe("PROVIDER_OPTIONS", () => {
-  it("keeps Claude Code and Cursor visible as unavailable placeholders in the stack base", () => {
-    const claude = PROVIDER_OPTIONS.find((option) => option.value === "claudeCode");
+  it("lists all registered providers as available, with Cursor as unavailable placeholder", () => {
+    const claude = PROVIDER_OPTIONS.find((option) => option.value === "claudeAgent");
     const cursor = PROVIDER_OPTIONS.find((option) => option.value === "cursor");
     expect(PROVIDER_OPTIONS).toEqual([
       { value: "codex", label: "Codex", available: true },
+      { value: "claudeAgent", label: "Claude Agent", available: true },
       { value: "pi", label: "Pi", available: true },
-      { value: "claudeCode", label: "Claude Code", available: false },
       { value: "cursor", label: "Cursor", available: false },
     ]);
     expect(claude).toEqual({
-      value: "claudeCode",
-      label: "Claude Code",
-      available: false,
+      value: "claudeAgent",
+      label: "Claude Agent",
+      available: true,
     });
     expect(cursor).toEqual({
       value: "cursor",

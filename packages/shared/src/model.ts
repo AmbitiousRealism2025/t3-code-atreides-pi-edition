@@ -69,7 +69,7 @@ export function resolveModelSlugForProvider(
 export function getReasoningEffortOptions(
   provider: ProviderKind = "codex",
 ): ReadonlyArray<CodexReasoningEffort> {
-  return REASONING_EFFORT_OPTIONS_BY_PROVIDER[provider];
+  return REASONING_EFFORT_OPTIONS_BY_PROVIDER[provider] as ReadonlyArray<CodexReasoningEffort>;
 }
 
 export function supportsPiThinkingLevel(
@@ -96,7 +96,7 @@ export function getDefaultReasoningEffort(provider: ProviderKind): CodexReasonin
 export function getDefaultReasoningEffort(
   provider: ProviderKind = "codex",
 ): CodexReasoningEffort | null {
-  return DEFAULT_REASONING_EFFORT_BY_PROVIDER[provider];
+  return DEFAULT_REASONING_EFFORT_BY_PROVIDER[provider] as CodexReasoningEffort | null;
 }
 
 // ── Claude-specific helpers ─────────────────────────────────────────

@@ -3,6 +3,7 @@ import {
   DEFAULT_MODEL_BY_PROVIDER,
   ProviderKind as ProviderKindSchema,
   type ProviderKind,
+  type ModelSlug,
   ThreadId,
   type OrchestrationReadModel,
   type OrchestrationSessionStatus,
@@ -161,15 +162,18 @@ function inferProviderForThreadModel(input: {
   readonly model: string;
   readonly sessionProviderName: string | null;
 }): ProviderKind {
+  // Prefer session provider identity when available
   if (isProviderKind(input.sessionProviderName)) {
     return input.sessionProviderName;
   }
+  // Infer from model slug as fallback
   for (const provider of PROVIDER_ID_LIST) {
     const normalized = normalizeModelSlug(input.model, provider);
     if (normalized && MODEL_SLUGS_BY_PROVIDER[provider].has(normalized)) {
       return provider;
     }
   }
+  // If we can't determine, use codex as last resort but this is a degraded state
   return "codex";
 }
 
@@ -222,13 +226,7 @@ export function syncServerReadModel(state: AppState, readModel: OrchestrationRea
         codexThreadId: null,
         projectId: thread.projectId,
         title: thread.title,
-        model: resolveModelSlugForProvider(
-          inferProviderForThreadModel({
-            model: thread.model,
-            sessionProviderName: thread.session?.providerName ?? null,
-          }),
-          thread.model,
-        ),
+        model: resolveModelSlug(thread.model) as ModelSlug,
         runtimeMode: thread.runtimeMode,
         interactionMode: thread.interactionMode,
         session: thread.session
